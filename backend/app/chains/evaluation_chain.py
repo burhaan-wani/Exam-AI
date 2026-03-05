@@ -1,13 +1,12 @@
 """
-LangChain Answer Evaluation Chain
+Answer Evaluation Chain using OpenAI client (via OpenRouter)
 Multi-step: rubric extraction → semantic scoring → completeness → Bloom alignment → aggregation
 """
 
+import asyncio
 import json
 import logging
-from langchain_openrouter import ChatOpenRouter
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from openai import OpenAI
 from app.config import get_settings
 from app.services.prompt_builder import build_evaluation_prompt
 
@@ -15,35 +14,10 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-EVALUATION_TEMPLATE = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert exam evaluator. Evaluate answers using rubric-based scoring. Return valid JSON only."),
-    ("human", "{prompt}"),
-])
-
-RUBRIC_EXTRACTION_TEMPLATE = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert at creating exam rubrics. Extract key evaluation criteria from the model answer."),
-    ("human", """Given this exam question and model answer, extract a rubric with key points that should be present in a correct answer.
-
-Question: {question_text}
-Model Answer: {model_answer}
-Max Marks: {max_marks}
-
-Return ONLY valid JSON:
-{{
-  "rubric_points": [
-    {{"point": "Key concept or fact", "weight": <float 0-1>}},
-    ...
-  ]
-}}
-"""),
-])
-
-
-def _get_llm():
-    return ChatOpenRouter(
-        model=settings.openrouter_model,
+def _get_openai_client() -> OpenAI:
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
         api_key=settings.openrouter_api_key,
-        temperature=0.2,
     )
 
 
@@ -58,14 +32,41 @@ def _parse_json(text: str) -> dict:
 async def extract_rubric(question_text: str, model_answer: str, max_marks: int) -> list[dict]:
     """Extract rubric points from model answer using LLM."""
     logger.info("Extracting rubric from model answer")
-    chain = RUBRIC_EXTRACTION_TEMPLATE | _get_llm() | StrOutputParser()
-    result = await chain.ainvoke({
-        "question_text": question_text,
-        "model_answer": model_answer,
-        "max_marks": str(max_marks),
-    })
+
+    system_message = (
+        "You are an expert at creating exam rubrics. "
+        "Extract key evaluation criteria from the model answer and return ONLY valid JSON."
+    )
+    user_message = f"""Given this exam question and model answer, extract a rubric with key points that should be present in a correct answer.
+
+Question: {question_text}
+Model Answer: {model_answer}
+Max Marks: {max_marks}
+
+Return ONLY valid JSON:
+{{
+  "rubric_points": [
+    {{"point": "Key concept or fact", "weight": <float 0-1>}},
+    ...
+  ]
+}}
+"""
+
+    client = _get_openai_client()
+
+    def _run_completion() -> str:
+        resp = client.chat.completions.create(
+            model=settings.openrouter_model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        return resp.choices[0].message.content or ""
+
     try:
-        data = _parse_json(result)
+        raw = await asyncio.to_thread(_run_completion)
+        data = _parse_json(raw)
         return data.get("rubric_points", [])
     except (json.JSONDecodeError, KeyError):
         logger.warning("Could not parse rubric, proceeding without it")
@@ -95,11 +96,27 @@ async def evaluate_answer(
         bloom_level=bloom_level,
     )
 
-    chain = EVALUATION_TEMPLATE | _get_llm() | StrOutputParser()
-    result = await chain.ainvoke({"prompt": prompt_text})
+    client = _get_openai_client()
+
+    def _run_completion() -> str:
+        resp = client.chat.completions.create(
+            model=settings.openrouter_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an expert exam evaluator. Evaluate answers using rubric-based scoring. "
+                        "Return valid JSON only."
+                    ),
+                },
+                {"role": "user", "content": prompt_text},
+            ],
+        )
+        return resp.choices[0].message.content or ""
 
     try:
-        data = _parse_json(result)
+        raw = await asyncio.to_thread(_run_completion)
+        data = _parse_json(raw)
         # Clamp awarded marks
         data["awarded_marks"] = min(float(data.get("awarded_marks", 0)), max_marks)
         data["awarded_marks"] = max(0.0, data["awarded_marks"])

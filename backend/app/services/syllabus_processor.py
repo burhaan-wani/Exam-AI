@@ -1,16 +1,29 @@
+import asyncio
 import json
 import logging
-from langchain_openrouter import ChatOpenRouter
-from langchain.prompts import ChatPromptTemplate
+from openai import OpenAI
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-TOPIC_EXTRACTION_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert academic syllabus analyzer. Extract structured topics from the given syllabus text."),
-    ("human", """Analyze the following syllabus text and extract a structured list of topics.
+def _get_openai_client() -> OpenAI:
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=settings.openrouter_api_key,
+    )
+
+
+async def extract_topics(syllabus_text: str) -> list[dict]:
+    """Use OpenAI client (via OpenRouter) to extract topics from syllabus text."""
+    logger.info("Extracting topics from syllabus text via LLM")
+
+    system_message = (
+        "You are an expert academic syllabus analyzer. "
+        "Extract structured topics from the given syllabus text and return ONLY valid JSON."
+    )
+    user_message = f"""Analyze the following syllabus text and extract a structured list of topics.
 
 For each topic, provide:
 - name: the main topic name
@@ -29,25 +42,24 @@ Return ONLY valid JSON in this exact format:
 }}
 
 Syllabus text:
-{syllabus_text}
-""")
-])
+{syllabus_text[:8000]}
+"""
 
+    client = _get_openai_client()
 
-async def extract_topics(syllabus_text: str) -> list[dict]:
-    """Use LLM to extract topics from syllabus text."""
-    logger.info("Extracting topics from syllabus text via LLM")
-    llm = ChatOpenRouter(
-      model=settings.openrouter_model,
-      api_key=settings.openrouter_api_key,
-        temperature=0.2,
-    )
-    chain = TOPIC_EXTRACTION_PROMPT | llm
-    result = await chain.ainvoke({"syllabus_text": syllabus_text[:8000]})
+    def _run_completion() -> str:
+        resp = client.chat.completions.create(
+            model=settings.openrouter_model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message},
+            ],
+        )
+        return resp.choices[0].message.content or ""
 
     try:
-        content = result.content.strip()
-        # Strip markdown code fences if present
+        raw_content = await asyncio.to_thread(_run_completion)
+        content = raw_content.strip()
         if content.startswith("```"):
             content = content.split("\n", 1)[1]
             content = content.rsplit("```", 1)[0]

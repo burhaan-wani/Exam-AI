@@ -1,13 +1,12 @@
 """
-LangChain Question Refinement Chain
+Question Refinement using OpenAI client (via OpenRouter)
 Used in the HITL loop to refine questions based on teacher feedback.
 """
 
+import asyncio
 import json
 import logging
-from langchain_openrouter import ChatOpenRouter
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+from openai import OpenAI
 from app.config import get_settings
 from app.services.prompt_builder import build_refinement_prompt
 from app.models.schemas import BloomLevel
@@ -15,17 +14,11 @@ from app.models.schemas import BloomLevel
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-REFINEMENT_TEMPLATE = ChatPromptTemplate.from_messages([
-    ("system", "You are an expert exam question editor. Refine the question based on feedback. Return valid JSON only."),
-    ("human", "{prompt}"),
-])
 
-
-def _get_llm():
-    return ChatOpenRouter(
-        model=settings.openrouter_model,
+def _get_openai_client() -> OpenAI:
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
         api_key=settings.openrouter_api_key,
-        temperature=0.5,
     )
 
 
@@ -42,7 +35,7 @@ async def refine_question(
     feedback: str,
     bloom_level: BloomLevel,
 ) -> dict:
-    """Refine a question using LangChain chain based on teacher feedback."""
+    """Refine a question using OpenAI client based on teacher feedback."""
     logger.info(f"Refining question with feedback: {feedback[:80]}...")
 
     prompt_text = build_refinement_prompt(
@@ -51,11 +44,24 @@ async def refine_question(
         bloom_level=bloom_level,
     )
 
-    chain = REFINEMENT_TEMPLATE | _get_llm() | StrOutputParser()
-    result = await chain.ainvoke({"prompt": prompt_text})
+    client = _get_openai_client()
+
+    def _run_completion() -> str:
+        resp = client.chat.completions.create(
+            model=settings.openrouter_model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an expert exam question editor. Refine the question based on feedback. Return valid JSON only.",
+                },
+                {"role": "user", "content": prompt_text},
+            ],
+        )
+        return resp.choices[0].message.content or ""
 
     try:
-        data = _parse_json(result)
+        raw = await asyncio.to_thread(_run_completion)
+        data = _parse_json(raw)
         logger.info("Question refined successfully")
         return data
     except (json.JSONDecodeError, KeyError) as e:
