@@ -1,0 +1,62 @@
+# --- General ---
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.temp
+
+# --- Python / Backend ---
+backend/__pycache__/
+backend/**/*.py[cod]
+backend/.venv/
+backend/venv/
+backend/env/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.coverage
+backend/htmlcov/
+
+# Virtualenvs at root (if any)
+.venv/
+venv/
+env/
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+
+# Local env files
+*.env
+*.env.local
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# --- Node / Frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/.turbo/
+frontend/.parcel-cache/
+frontend/.next/
+
+# Vite cache
+frontend/node_modules/.vite/
+
+# Lockfile backups (keep the real ones)
+package-lock.json.*
+yarn.lock.*
+pnpm-lock.yaml.*
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- OS-specific ---
+ehthumbs.db
+Desktop.ini
+
+# --- Cursor / IDE metadata ---
+.cursor/
