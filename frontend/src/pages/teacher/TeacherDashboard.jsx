@@ -37,30 +37,16 @@ const TeacherDashboard = () => {
     },
     {
       num: 2,
-      title: 'Configure Bloom Levels',
-      description: 'Set cognitive levels and questions per topic',
-      path: '/configure-bloom',
-      icon: Settings,
-    },
-    {
-      num: 3,
-      title: 'Generate Questions',
-      description: 'Generate AI-powered exam questions',
-      path: '/generate-questions',
+      title: 'Question Bank',
+      description: 'Generate and manage AI question banks',
+      path: '/dashboard', // syllabus-specific links are shown below
       icon: Sparkles,
     },
     {
-      num: 4,
-      title: 'Review Questions (HITL)',
-      description: 'Review and refine generated questions',
-      path: '/review-questions',
-      icon: ClipboardList,
-    },
-    {
-      num: 5,
+      num: 3,
       title: 'Generate Paper',
-      description: 'Finalize and assemble question paper',
-      path: '/question-paper',
+      description: 'Build papers from the question bank',
+      path: '/dashboard',
       icon: FileText,
     },
   ]
@@ -117,9 +103,9 @@ const TeacherDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="flex gap-2">
-                    <Link to={`/configure-bloom/${syllabus.id}`} className="flex-1">
+                    <Link to={`/question-bank/${syllabus.id}`} className="flex-1">
                       <Button variant="secondary" className="w-full text-sm">
-                        Configure
+                        Question Bank
                       </Button>
                     </Link>
                     <Link to={`/upload-syllabus?view=${syllabus.id}`} className="flex-1">

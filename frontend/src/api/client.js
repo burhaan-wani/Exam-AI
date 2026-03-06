@@ -78,4 +78,48 @@ export const evaluationAPI = {
     apiClient.get(`/evaluation/by-paper/${paperId}`),
 }
 
+// Two-stage Question Bank / Paper APIs
+export const questionBankAPI = {
+  // New syllabus upload endpoint for the two-stage pipeline
+  uploadSyllabus: (file, userId = 'anonymous') => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('user_id', userId)
+    return apiClient.post('/upload-syllabus', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  uploadReferenceMaterial: (syllabusId, file) => {
+    const formData = new FormData()
+    formData.append('syllabus_id', syllabusId)
+    formData.append('file', file)
+    return apiClient.post('/upload-reference-material', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  generateQuestionBank: (syllabusId) =>
+    apiClient.post('/generate-question-bank', { syllabus_id: syllabusId }),
+
+  listQuestionBank: (syllabusId, params = {}) =>
+    apiClient.get('/question-bank', {
+      params: { syllabus_id: syllabusId, ...params },
+    }),
+
+  generateQuestionPaper: (template) =>
+    apiClient.post('/generate-question-paper', template),
+
+  reviewQuestionInPaper: (paperId, questionNumber) => {
+    const formData = new FormData()
+    formData.append('paper_id', paperId)
+    formData.append('question_number', String(questionNumber))
+    return apiClient.post('/review-question', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  getFinalPaper: (paperId) => apiClient.get('/final-paper', { params: { paper_id: paperId } }),
+}
+
 export default apiClient

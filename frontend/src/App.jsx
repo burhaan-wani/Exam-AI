@@ -10,6 +10,7 @@ import BloomConfig from './pages/teacher/BloomConfig'
 import QuestionGeneration from './pages/teacher/QuestionGeneration'
 import HITLReview from './pages/teacher/HITLReview'
 import QuestionPaperView from './pages/teacher/QuestionPaperView'
+import QuestionBankPage from './pages/teacher/QuestionBankPage'
 import StudentAnswerSubmission from './pages/student/StudentAnswerSubmission'
 import EvaluationResults from './pages/student/EvaluationResults'
 
@@ -74,6 +75,14 @@ function App() {
             element={
               <TeacherRoute>
                 <QuestionPaperView />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="question-bank/:syllabusId"
+            element={
+              <TeacherRoute>
+                <QuestionBankPage />
               </TeacherRoute>
             }
           />
