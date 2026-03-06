@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from langchain_core.documents import Document
+from langchain.schema import Document
 
 from app.services.vector_store import build_vector_store_from_documents, get_retriever_from_vector_store
 

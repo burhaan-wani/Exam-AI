@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from bson import ObjectId
-from langchain_core.prompts import ChatPromptTemplate
+from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.config import get_settings

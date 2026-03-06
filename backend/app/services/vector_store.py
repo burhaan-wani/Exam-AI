@@ -4,8 +4,8 @@ from typing import List, Tuple
 
 from langchain_community.vectorstores import FAISS
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders.base import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import Document
 
 logger = logging.getLogger(__name__)
 
