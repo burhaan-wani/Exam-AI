@@ -99,6 +99,9 @@ export const questionBankAPI = {
     })
   },
 
+  listReferenceMaterial: (syllabusId) =>
+    apiClient.get('/reference-material', { params: { syllabus_id: syllabusId } }),
+
   generateQuestionBank: (syllabusId) =>
     apiClient.post('/generate-question-bank', { syllabus_id: syllabusId }),
 

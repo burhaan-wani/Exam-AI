@@ -143,6 +143,22 @@ async def upload_reference_material(
     }
 
 
+@router.get("/reference-material")
+async def list_reference_material(syllabus_id: str):
+    """List reference materials uploaded for a syllabus (metadata only)."""
+    cursor = documents_collection.find({"syllabus_id": syllabus_id})
+    docs = await cursor.to_list(length=200)
+    return [
+        {
+            "id": str(d["_id"]),
+            "syllabus_id": d.get("syllabus_id", ""),
+            "file_name": d.get("file_name", ""),
+            "file_type": d.get("file_type", ""),
+        }
+        for d in docs
+    ]
+
+
 @router.post("/review-question")
 async def review_question_in_paper(
     paper_id: str = Form(...),

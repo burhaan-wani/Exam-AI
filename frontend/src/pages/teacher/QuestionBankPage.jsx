@@ -15,10 +15,12 @@ const QuestionBankPage = () => {
   const [loadingBank, setLoadingBank] = useState(false)
   const [uploadingRef, setUploadingRef] = useState(false)
   const [refFile, setRefFile] = useState(null)
+  const [refDocs, setRefDocs] = useState([])
 
   useEffect(() => {
     loadSyllabus()
     loadBank()
+    loadReferenceMaterial()
   }, [syllabusId])
 
   const loadSyllabus = async () => {
@@ -42,6 +44,15 @@ const QuestionBankPage = () => {
     }
   }
 
+  const loadReferenceMaterial = async () => {
+    try {
+      const response = await questionBankAPI.listReferenceMaterial(syllabusId)
+      setRefDocs(response.data || [])
+    } catch {
+      setRefDocs([])
+    }
+  }
+
   const handleUploadRef = async () => {
     if (!refFile) {
       toast.error('Please select a reference file')
@@ -51,6 +62,8 @@ const QuestionBankPage = () => {
     try {
       await questionBankAPI.uploadReferenceMaterial(syllabusId, refFile)
       toast.success('Reference material uploaded!')
+      setRefFile(null)
+      await loadReferenceMaterial()
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload reference material')
     } finally {
@@ -118,12 +131,29 @@ const QuestionBankPage = () => {
       {/* Reference Material Upload */}
       <Card>
         <CardHeader>
-          <CardTitle>Reference Material (Optional)</CardTitle>
+          <CardTitle>Add More Reference Material (Optional)</CardTitle>
           <CardDescription>
-            Upload textbooks, lecture notes, or previous papers to ground question generation (RAG).
+            You already upload course material on the Upload Syllabus page. Use this only if you want
+            to add more files later for better RAG grounding.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          {refDocs.length > 0 && (
+            <div className="text-sm text-gray-700">
+              <p className="font-semibold mb-1">Already uploaded ({refDocs.length}):</p>
+              <ul className="list-disc list-inside space-y-1">
+                {refDocs.slice(0, 8).map((d) => (
+                  <li key={d.id}>
+                    {d.file_name}
+                    {d.file_type ? ` (${d.file_type})` : ''}
+                  </li>
+                ))}
+              </ul>
+              {refDocs.length > 8 && (
+                <p className="text-xs text-gray-500 mt-1">…and {refDocs.length - 8} more</p>
+              )}
+            </div>
+          )}
           <Input
             type="file"
             accept=".pdf,.docx,.doc,.txt"
