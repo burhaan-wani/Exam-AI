@@ -15,6 +15,9 @@ hitl_feedback_collection = db["hitl_feedback"]
 final_question_paper_collection = db["final_question_paper"]
 student_answers_collection = db["student_answers"]
 evaluation_results_collection = db["evaluation_results"]
+documents_collection = db["documents"]
+question_bank_collection = db["question_bank"]
+draft_question_paper_collection = db["draft_question_paper"]
 
 
 async def init_indexes():
@@ -26,3 +29,7 @@ async def init_indexes():
     await final_question_paper_collection.create_index("syllabus_id")
     await student_answers_collection.create_index("paper_id")
     await evaluation_results_collection.create_index("answer_id")
+    await documents_collection.create_index("uploaded_at")
+    await question_bank_collection.create_index([("unit", 1), ("bloom_level", 1)])
+    await question_bank_collection.create_index("syllabus_id")
+    await draft_question_paper_collection.create_index("syllabus_id")

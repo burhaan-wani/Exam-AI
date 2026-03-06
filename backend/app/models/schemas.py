@@ -229,3 +229,86 @@ class EvaluationResultOut(BaseModel):
 
 class EvaluateRequest(BaseModel):
     answer_id: str
+
+
+# ── RAG Documents & Question Bank (V2 Pipeline) ────────────────────────────────
+
+class CourseUnit(BaseModel):
+    code: str  # e.g. C1
+    title: str  # e.g. "Generative Modeling"
+
+
+class UnitsOut(BaseModel):
+    syllabus_id: str
+    units: list[CourseUnit]
+
+
+class DocumentOut(BaseModel):
+    id: str
+    syllabus_id: str = ""
+    file_name: str
+    file_type: str
+    content: str = ""
+    uploaded_at: str
+
+
+class QuestionBankItem(BaseModel):
+    id: str = ""
+    syllabus_id: str = ""
+    question: str
+    unit: str
+    topic: str = ""
+    bloom_level: int  # 1, 2, 3
+    marks: int = 5
+    difficulty: str = "medium"
+    source_context: str = ""
+    created_at: str = ""
+
+
+class GenerateQuestionBankRequest(BaseModel):
+    syllabus_id: str
+    use_rag: bool = True
+    level1_count: int = 3
+    level2_count: int = 2
+    level3_count: int = 2
+    marks: int = 5
+
+
+class PaperTemplateSection(BaseModel):
+    name: str
+    bloom_level: int
+    count: int
+
+
+class GenerateQuestionPaperRequest(BaseModel):
+    syllabus_id: str
+    exam_title: str = "Examination"
+    duration_minutes: int = 180
+    template: list[PaperTemplateSection]
+
+
+class DraftPaperQuestion(BaseModel):
+    question_bank_id: str
+    question_number: int
+    question: str
+    unit: str
+    topic: str = ""
+    bloom_level: int
+    marks: int
+    difficulty: str = "medium"
+
+
+class DraftPaperOut(BaseModel):
+    id: str
+    syllabus_id: str
+    exam_title: str
+    duration_minutes: int
+    questions: list[DraftPaperQuestion]
+    created_at: str
+
+
+class ReviewQuestionRequest(BaseModel):
+    draft_paper_id: str
+    question_number: int
+    action: str  # approve | reject | replace
+    note: str = ""

@@ -3,12 +3,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse
-from openai import AuthenticationError as OpenAIAuthError, PermissionError as OpenAIPermissionError
+from openai import AuthenticationError as OpenAIAuthError
 
 from app.config import get_settings
 from app.database import init_indexes
 from app.utils.logger import setup_logging
-from app.routes import syllabus, questions, hitl, paper, evaluation, auth
+from app.routes import syllabus, questions, hitl, paper, evaluation, auth, pipeline_v2
 
 settings = get_settings()
 
@@ -55,12 +55,6 @@ async def openrouter_auth_error(_request, exc):
     )
 
 
-@app.exception_handler(OpenAIPermissionError)
-async def openrouter_permission_error(_request, exc):
-    return JSONResponse(
-        status_code=502,
-        content={"detail": OPENROUTER_AUTH_MESSAGE},
-    )
 
 
 # Routes
@@ -70,6 +64,7 @@ app.include_router(questions.router, prefix="/api/questions", tags=["Questions"]
 app.include_router(hitl.router, prefix="/api/hitl", tags=["HITL"])
 app.include_router(paper.router, prefix="/api/paper", tags=["Paper"])
 app.include_router(evaluation.router, prefix="/api/evaluation", tags=["Evaluation"])
+app.include_router(pipeline_v2.router, prefix="/api", tags=["PipelineV2"])
 
 
 @app.get("/api/health")
