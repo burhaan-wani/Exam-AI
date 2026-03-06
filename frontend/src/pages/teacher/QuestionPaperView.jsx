@@ -5,6 +5,7 @@ import { paperAPI } from '@/api/client'
 import Button from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
 import { Download, Share2, Printer } from 'lucide-react'
+import html2pdf from 'html2pdf.js'
 
 const QuestionPaperView = () => {
   const { paperId } = useParams()
@@ -36,7 +37,6 @@ const QuestionPaperView = () => {
     if (!paper) return
 
     try {
-      const html2pdf = (await import('html2pdf.js')).default
       const element = document.getElementById('question-paper')
 
       if (!element) {

@@ -21,7 +21,8 @@
     "clsx": "^2.0.0",
     "tailwind-merge": "^2.2.0",
     "lucide-react": "^0.292.0",
-    "sonner": "^1.2.3"
+    "sonner": "^1.2.3",
+    "html2pdf.js": "^0.10.1"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",
