@@ -17,6 +17,10 @@ def _get_openai_client() -> OpenAI:
 
 async def extract_topics(syllabus_text: str) -> list[dict]:
     """Use OpenAI client (via OpenRouter) to extract topics from syllabus text."""
+    if not (settings.openrouter_api_key or "").strip():
+        raise ValueError(
+            "OPENROUTER_API_KEY is not set in backend/.env. Get a key at https://openrouter.ai/keys"
+        )
     logger.info("Extracting topics from syllabus text via LLM")
 
     system_message = (

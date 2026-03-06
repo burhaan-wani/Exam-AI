@@ -25,8 +25,11 @@ async def upload_syllabus(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    # Extract topics via LLM
-    topics = await extract_topics(raw_text)
+    # Extract topics via LLM (OpenRouter)
+    try:
+        topics = await extract_topics(raw_text)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
     doc = {
         "user_id": user_id,
