@@ -9,7 +9,6 @@ from app.models.schemas import (
     QuestionBankItem,
     QuestionBankCreateRequest,
     QuestionPaperTemplate,
-    QuestionBankListQuery,
 )
 from app.services.syllabus_parser import parse_syllabus_units
 from app.services.question_bank_generator import generate_question_bank_for_syllabus

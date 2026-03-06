@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,13 @@ Syllabus text:
             content = content.rsplit("```", 1)[0]
         data = json.loads(content)
         return data.get("topics", [])
+    except RateLimitError as e:
+        # Surface a clear, user-facing message when the free model is rate-limited.
+        logger.warning(f"Topic extraction rate-limited: {e}")
+        raise ValueError(
+            "The selected OpenRouter model is temporarily rate-limited. "
+            "Please try again in a few minutes or switch to a different model in OPENROUTER_MODEL."
+        )
     except (json.JSONDecodeError, AttributeError) as e:
         logger.error(f"Failed to parse LLM topic extraction: {e}")
         # Fallback: split by lines as rough topics
