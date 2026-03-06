@@ -1,35 +1,41 @@
-import os
-from app.config import get_settings
+import logging
+from functools import lru_cache
+from typing import List, Tuple
 
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma, FAISS
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders.base import Document
+
+logger = logging.getLogger(__name__)
 
 
-settings = get_settings()
+@lru_cache()
+def get_embeddings() -> HuggingFaceEmbeddings:
+    # Lightweight general-purpose sentence-transformer
+    model_name = "sentence-transformers/all-MiniLM-L6-v2"
+    logger.info("Loading embeddings model %s", model_name)
+    return HuggingFaceEmbeddings(model_name=model_name)
 
 
-def get_embeddings() -> OpenAIEmbeddings:
-    return OpenAIEmbeddings(
-        model=settings.openrouter_embedding_model,
-        openai_api_key=settings.openrouter_api_key,
-        openai_api_base="https://openrouter.ai/api/v1",
+def build_vector_store_from_documents(documents: List[Document]) -> Tuple[FAISS, int]:
+    """Create an in-memory FAISS index from a list of LangChain Documents."""
+    if not documents:
+        raise ValueError("No documents provided for vector store")
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=150,
     )
+    chunks = splitter.split_documents(documents)
+    logger.info("Split %d documents into %d chunks for RAG", len(documents), len(chunks))
 
-
-def get_vector_store(collection_name: str = "exam_ai_docs"):
-    backend = (settings.vector_store_backend or "chroma").lower().strip()
     embeddings = get_embeddings()
+    vs = FAISS.from_documents(chunks, embeddings)
+    return vs, len(chunks)
 
-    if backend == "faiss":
-        # In-memory FAISS (caller responsible for persistence if desired)
-        return FAISS.from_texts(texts=[], embedding=embeddings)
 
-    # Default: persistent Chroma
-    persist_dir = settings.chroma_persist_dir or "./data/chroma"
-    os.makedirs(persist_dir, exist_ok=True)
-    return Chroma(
-        collection_name=collection_name,
-        embedding_function=embeddings,
-        persist_directory=persist_dir,
-    )
+def get_retriever_from_vector_store(vs: FAISS, k: int = 4):
+    """Return a retriever interface from an existing FAISS vector store."""
+    return vs.as_retriever(search_kwargs={"k": k})
 

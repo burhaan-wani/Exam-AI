@@ -8,7 +8,7 @@ from openai import AuthenticationError as OpenAIAuthError
 from app.config import get_settings
 from app.database import init_indexes
 from app.utils.logger import setup_logging
-from app.routes import syllabus, questions, hitl, paper, evaluation, auth, pipeline_v2
+from app.routes import syllabus, questions, hitl, paper, evaluation, auth, question_bank
 
 settings = get_settings()
 
@@ -64,7 +64,12 @@ app.include_router(questions.router, prefix="/api/questions", tags=["Questions"]
 app.include_router(hitl.router, prefix="/api/hitl", tags=["HITL"])
 app.include_router(paper.router, prefix="/api/paper", tags=["Paper"])
 app.include_router(evaluation.router, prefix="/api/evaluation", tags=["Evaluation"])
-app.include_router(pipeline_v2.router, prefix="/api", tags=["PipelineV2"])
+# New two-stage pipeline endpoints
+app.include_router(
+    question_bank.router,
+    prefix="/api",
+    tags=["Question Bank & Paper Generation"],
+)
 
 
 @app.get("/api/health")
