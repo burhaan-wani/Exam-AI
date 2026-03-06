@@ -224,13 +224,13 @@ Student answers are evaluated on:
 ### Environment Variables (Backend)
 
 ```
-MONGODB_URL           # MongoDB connection URI
-DATABASE_NAME         # Database name (default: exam_ai)
-OPENAI_API_KEY       # OpenAI API key
-OPENAI_MODEL         # Model to use (e.g., gpt-4-mini)
-SECRET_KEY           # JWT secret key
+MONGODB_URL            # MongoDB connection URI
+DATABASE_NAME          # Database name (default: exam_ai)
+OPENROUTER_API_KEY     # OpenRouter API key (https://openrouter.ai/keys)
+OPENROUTER_MODEL       # Chat model to use via OpenRouter (e.g., openai/gpt-oss-120b:free)
+SECRET_KEY             # JWT secret key
 ACCESS_TOKEN_EXPIRE_MINUTES  # Token expiry (default: 480)
-CORS_ORIGINS         # Comma-separated CORS origins
+CORS_ORIGINS           # Comma-separated CORS origins (e.g., http://localhost:5173)
 ```
 
 ## Common Issues

@@ -163,6 +163,8 @@ class PaperQuestion(BaseModel):
     bloom_level: str
     topic: str
     model_answer: str = ""
+    unit: str = ""
+    bank_id: str = ""
 
 
 class FinalPaperOut(BaseModel):

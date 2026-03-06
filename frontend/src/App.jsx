@@ -1,6 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
-import ProtectedRoute from './components/ProtectedRoute'
+import ProtectedRoute, { TeacherRoute, StudentRoute } from './components/ProtectedRoute'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
@@ -28,14 +28,74 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="dashboard" element={<TeacherDashboard />} />
-          <Route path="upload-syllabus" element={<SyllabusUpload />} />
-          <Route path="configure-bloom/:syllabusId" element={<BloomConfig />} />
-          <Route path="generate-questions/:blueprintId" element={<QuestionGeneration />} />
-          <Route path="review-questions/:blueprintId" element={<HITLReview />} />
-          <Route path="question-paper/:paperId" element={<QuestionPaperView />} />
-          <Route path="submit-answers/:paperId" element={<StudentAnswerSubmission />} />
-          <Route path="evaluation-results/:evalId" element={<EvaluationResults />} />
+          {/* Teacher routes */}
+          <Route
+            path="dashboard"
+            element={
+              <TeacherRoute>
+                <TeacherDashboard />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="upload-syllabus"
+            element={
+              <TeacherRoute>
+                <SyllabusUpload />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="configure-bloom/:syllabusId"
+            element={
+              <TeacherRoute>
+                <BloomConfig />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="generate-questions/:blueprintId"
+            element={
+              <TeacherRoute>
+                <QuestionGeneration />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="review-questions/:blueprintId"
+            element={
+              <TeacherRoute>
+                <HITLReview />
+              </TeacherRoute>
+            }
+          />
+          <Route
+            path="question-paper/:paperId"
+            element={
+              <TeacherRoute>
+                <QuestionPaperView />
+              </TeacherRoute>
+            }
+          />
+
+          {/* Student routes */}
+          <Route
+            path="submit-answers/:paperId"
+            element={
+              <StudentRoute>
+                <StudentAnswerSubmission />
+              </StudentRoute>
+            }
+          />
+          <Route
+            path="evaluation-results/:evalId"
+            element={
+              <StudentRoute>
+                <EvaluationResults />
+              </StudentRoute>
+            }
+          />
+
           <Route index element={<Navigate to="/dashboard" replace />} />
         </Route>
 

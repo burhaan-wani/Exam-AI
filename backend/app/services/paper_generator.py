@@ -144,6 +144,8 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
                 bloom_level=src.get("bloom_level", ""),
                 topic=src.get("topic", ""),
                 model_answer="",
+                unit=src.get("unit", ""),
+                bank_id=qid,
             )
             questions.append(pq)
             total_marks += marks

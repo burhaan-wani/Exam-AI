@@ -8,9 +8,10 @@ from typing import List
 from bson import ObjectId
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_core.documents import Document
 
 from app.config import get_settings
-from app.database import question_bank_collection, syllabus_collection
+from app.database import question_bank_collection, syllabus_collection, documents_collection
 from app.models.schemas import BloomLevel, QuestionBankItem
 from app.services.rag_retriever import build_retriever_for_unit
 
@@ -90,14 +91,32 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
     llm = _get_chat_model()
     question_items: List[QuestionBankItem] = []
 
-    # TODO: fetch reference documents per syllabus and build RAG retriever;
-    # for now, we call without external context.
+    # Build RAG retriever if reference documents exist for this syllabus
+    ref_cursor = documents_collection.find({"syllabus_id": syllabus_id})
+    ref_docs_raw = await ref_cursor.to_list(length=100)
     retriever = None
+    if ref_docs_raw:
+        lc_docs: List[Document] = []
+        for d in ref_docs_raw:
+            content = d.get("content", "")
+            if not content:
+                continue
+            lc_docs.append(
+                Document(
+                    page_content=content,
+                    metadata={
+                        "document_id": str(d["_id"]),
+                        "file_name": d.get("file_name", ""),
+                        "file_type": d.get("file_type", ""),
+                    },
+                )
+            )
+        if lc_docs:
+            retriever = await build_retriever_for_unit(lc_docs)
 
     for unit_name in units:
         context_text = ""
         if retriever:
-            # Example usage; currently retriever is None so this is skipped.
             docs = await retriever.ainvoke(unit_name)
             context_text = "\n\n".join(d.page_content for d in docs)
 
