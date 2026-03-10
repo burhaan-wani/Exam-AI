@@ -8,7 +8,7 @@ from openai import AuthenticationError as OpenAIAuthError
 from app.config import get_settings
 from app.database import init_indexes
 from app.utils.logger import setup_logging
-from app.routes import syllabus, questions, hitl, paper, evaluation, auth, question_bank
+from app.routes import syllabus, paper, evaluation, auth, question_bank
 
 settings = get_settings()
 
@@ -29,7 +29,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS
 origins = [o.strip() for o in settings.cors_origins.split(",")]
 app.add_middleware(
     CORSMiddleware,
@@ -39,7 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# OpenRouter/LLM auth errors: return clear message so user can fix .env
 OPENROUTER_AUTH_MESSAGE = (
     "OpenRouter authentication failed (401). "
     "Check OPENROUTER_API_KEY in backend/.env: get or regenerate a key at https://openrouter.ai/keys "
@@ -55,16 +53,10 @@ async def openrouter_auth_error(_request, exc):
     )
 
 
-
-
-# Routes
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(syllabus.router, prefix="/api/syllabus", tags=["Syllabus"])
-app.include_router(questions.router, prefix="/api/questions", tags=["Questions"])
-app.include_router(hitl.router, prefix="/api/hitl", tags=["HITL"])
 app.include_router(paper.router, prefix="/api/paper", tags=["Paper"])
 app.include_router(evaluation.router, prefix="/api/evaluation", tags=["Evaluation"])
-# New two-stage pipeline endpoints
 app.include_router(
     question_bank.router,
     prefix="/api",

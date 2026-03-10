@@ -1,15 +1,11 @@
 import logging
-from typing import List
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from bson import ObjectId
 
 from app.database import syllabus_collection, question_bank_collection, documents_collection, final_question_paper_collection
-from app.models.schemas import (
-    QuestionBankItem,
-    QuestionBankCreateRequest,
-    QuestionPaperTemplate,
-)
+from app.models.schemas import QuestionBankItem, QuestionBankCreateRequest, QuestionPaperTemplate
 from app.services.syllabus_parser import parse_syllabus_units
 from app.services.question_bank_generator import generate_question_bank_for_syllabus
 from app.services.paper_generator import generate_paper_from_question_bank
@@ -24,10 +20,7 @@ async def upload_syllabus_new(
     file: UploadFile = File(...),
     user_id: str = Form(default="anonymous"),
 ):
-    """
-    New syllabus upload endpoint for the two-stage pipeline.
-    Reuses the existing topic extraction logic and stores the syllabus document.
-    """
+    """Upload a syllabus for the new question-bank teacher pipeline."""
     file_bytes = await file.read()
     filename = file.filename or "unknown"
 
@@ -36,20 +29,23 @@ async def upload_syllabus_new(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    created_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "user_id": user_id,
         "filename": filename,
         "raw_text": raw_text,
-        "topics": [{"name": u, "unit": u, "subtopics": []} for u in units],
+        "topics": [{"name": unit, "unit": unit, "subtopics": []} for unit in units],
+        "created_at": created_at,
     }
     result = await syllabus_collection.insert_one(doc)
-    logger.info("Syllabus (new pipeline) uploaded: %s, %d units", filename, len(units))
+    logger.info("Syllabus uploaded: %s (%d units)", filename, len(units))
 
     return {
         "id": str(result.inserted_id),
         "filename": filename,
         "units": units,
         "unit_count": len(units),
+        "created_at": created_at,
     }
 
 
@@ -127,11 +123,13 @@ async def upload_reference_material(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
+    uploaded_at = datetime.now(timezone.utc).isoformat()
     doc = {
         "syllabus_id": syllabus_id,
         "file_name": filename,
         "file_type": filename.split(".")[-1].lower() if "." in filename else "txt",
         "content": content,
+        "uploaded_at": uploaded_at,
     }
     result = await documents_collection.insert_one(doc)
     logger.info("Uploaded reference material '%s' for syllabus %s", filename, syllabus_id)
@@ -140,12 +138,13 @@ async def upload_reference_material(
         "id": str(result.inserted_id),
         "syllabus_id": syllabus_id,
         "file_name": filename,
+        "uploaded_at": uploaded_at,
     }
 
 
 @router.get("/reference-material")
 async def list_reference_material(syllabus_id: str):
-    """List reference materials uploaded for a syllabus (metadata only)."""
+    """List reference materials uploaded for a syllabus."""
     cursor = documents_collection.find({"syllabus_id": syllabus_id})
     docs = await cursor.to_list(length=200)
     return [
@@ -154,6 +153,7 @@ async def list_reference_material(syllabus_id: str):
             "syllabus_id": d.get("syllabus_id", ""),
             "file_name": d.get("file_name", ""),
             "file_type": d.get("file_type", ""),
+            "uploaded_at": d.get("uploaded_at", ""),
         }
         for d in docs
     ]
@@ -164,11 +164,7 @@ async def review_question_in_paper(
     paper_id: str = Form(...),
     question_number: int = Form(...),
 ):
-    """
-    Simple HITL endpoint for the new pipeline:
-    replace a question in a generated paper with another from the bank
-    matching the same bloom level and unit, avoiding duplicates.
-    """
+    """Replace a paper question with another bank question from the same unit and Bloom level."""
     paper = await final_question_paper_collection.find_one({"_id": ObjectId(paper_id)})
     if not paper:
         raise HTTPException(404, "Paper not found")
@@ -213,7 +209,7 @@ async def review_question_in_paper(
 
 @router.get("/final-paper")
 async def get_final_paper(paper_id: str):
-    """Get a final question paper (alias for legacy paper endpoint)."""
+    """Alias for fetching a generated paper."""
     try:
         doc = await final_question_paper_collection.find_one({"_id": ObjectId(paper_id)})
     except Exception:
@@ -231,4 +227,3 @@ async def get_final_paper(paper_id: str):
         "questions": doc.get("questions", []),
         "created_at": doc.get("created_at", ""),
     }
-

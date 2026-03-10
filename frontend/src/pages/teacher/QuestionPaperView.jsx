@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
-import { paperAPI } from '@/api/client'
+import { paperAPI, questionBankAPI } from '@/api/client'
 import Button from '@/components/ui/Button'
 import { Card, CardContent } from '@/components/ui/Card'
-import { Download, Share2, Printer } from 'lucide-react'
+import { Download, Share2, Printer, RefreshCw } from 'lucide-react'
 import html2pdf from 'html2pdf.js'
 
 const QuestionPaperView = () => {
@@ -12,6 +12,7 @@ const QuestionPaperView = () => {
   const navigate = useNavigate()
   const [paper, setPaper] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [reviewingQuestion, setReviewingQuestion] = useState(null)
 
   useEffect(() => {
     loadPaper()
@@ -65,6 +66,19 @@ const QuestionPaperView = () => {
     toast.success('Link copied to clipboard!')
   }
 
+  const handleReplaceQuestion = async (questionNumber) => {
+    setReviewingQuestion(questionNumber)
+    try {
+      await questionBankAPI.reviewQuestionInPaper(paperId, questionNumber)
+      await loadPaper()
+      toast.success(`Question ${questionNumber} replaced`)
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Could not replace question')
+    } finally {
+      setReviewingQuestion(null)
+    }
+  }
+
   if (loading) {
     return <div className="text-center text-gray-500 py-8">Loading paper...</div>
   }
@@ -75,8 +89,7 @@ const QuestionPaperView = () => {
 
   return (
     <div className="space-y-6">
-      {/* Toolbar */}
-      <div className="flex gap-3 no-print">
+      <div className="flex flex-wrap gap-3 no-print">
         <Button onClick={handlePrint}>
           <Printer size={18} className="mr-2" />
           Print
@@ -91,12 +104,16 @@ const QuestionPaperView = () => {
         </Button>
       </div>
 
-      {/* A4 Paper Container */}
+      <Card className="no-print border-blue-200 bg-blue-50">
+        <CardContent className="pt-6 text-sm text-blue-900">
+          This view is the final teacher review step in the new pipeline. If a question is not a good fit, replace it here and the paper will be refreshed from the question bank.
+        </CardContent>
+      </Card>
+
       <div
         id="question-paper"
         className="max-w-4xl mx-auto bg-white p-12 shadow-lg print:shadow-none print:p-0 print:max-w-full"
       >
-        {/* Header */}
         <div className="text-center mb-8 border-b pb-6">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{paper.exam_title}</h1>
           <div className="text-sm text-gray-700 space-y-1">
@@ -105,7 +122,6 @@ const QuestionPaperView = () => {
           </div>
         </div>
 
-        {/* Instructions */}
         <div className="mb-8 p-4 bg-gray-50 rounded text-sm text-gray-700">
           <h3 className="font-semibold text-gray-900 mb-2">Instructions:</h3>
           <ul className="list-disc list-inside space-y-1 text-xs">
@@ -116,31 +132,46 @@ const QuestionPaperView = () => {
           </ul>
         </div>
 
-        {/* Questions */}
         <div className="space-y-6">
           {paper.questions.map((question) => (
             <div key={question.question_number} className="mb-6">
-              {/* Question Number and Marks */}
-              <div className="flex justify-between items-start mb-2">
-                <h3 className="text-lg font-bold text-gray-900">
-                  Question {question.question_number}
-                </h3>
-                <span className="bg-gray-200 px-3 py-1 rounded text-sm font-semibold text-gray-900">
-                  {question.marks} marks
-                </span>
+              <div className="flex justify-between items-start gap-4 mb-2">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Question {question.question_number}
+                  </h3>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500 print:hidden">
+                    {question.topic && <span>Topic: {question.topic}</span>}
+                    {question.unit && <span>Unit: {question.unit}</span>}
+                    {question.bloom_level && <span>Bloom: {question.bloom_level}</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="bg-gray-200 px-3 py-1 rounded text-sm font-semibold text-gray-900">
+                    {question.marks} marks
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="print:hidden"
+                    disabled={reviewingQuestion === question.question_number}
+                    onClick={() => handleReplaceQuestion(question.question_number)}
+                  >
+                    <RefreshCw size={14} className="mr-2" />
+                    {reviewingQuestion === question.question_number ? 'Replacing...' : 'Replace'}
+                  </Button>
+                </div>
               </div>
 
-              {/* Question Text */}
               <p className="text-gray-800 mb-3 leading-relaxed">{question.question_text}</p>
 
-              {/* Sub-questions */}
               {question.sub_questions && question.sub_questions.length > 0 && (
                 <div className="ml-6 space-y-2 mb-4">
                   {question.sub_questions.map((sub, idx) => (
                     <div key={idx}>
                       <p className="text-gray-800">
-                        <span className="font-semibold">{sub.label}</span>
-                        {' '}
+                        <span className="font-semibold">{sub.label}</span>{' '}
                         ({sub.marks} marks): {sub.text}
                       </p>
                     </div>
@@ -148,25 +179,17 @@ const QuestionPaperView = () => {
                 </div>
               )}
 
-              {/* Answer Space */}
               <div className="ml-6 border-l-2 border-gray-300 pl-4 py-8 text-gray-400 text-sm">
                 [Answer space for student]
-              </div>
-
-              {/* Metadata */}
-              <div className="mt-2 text-xs text-gray-500 print:hidden">
-                <span className="inline-block mr-4">Topic: {question.topic}</span>
-                <span className="inline-block">Bloom Level: {question.bloom_level}</span>
               </div>
             </div>
           ))}
         </div>
 
-        {/* Footer */}
         <div className="mt-12 pt-6 border-t text-center text-xs text-gray-600">
           <p>End of Question Paper</p>
           <p className="mt-2 text-gray-500">
-            Generated by Exam AI â€¢ {new Date(paper.created_at).toLocaleDateString()}
+            Generated by Exam AI {paper.created_at ? `• ${new Date(paper.created_at).toLocaleDateString()}` : ''}
           </p>
         </div>
       </div>

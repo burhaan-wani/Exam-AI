@@ -5,7 +5,6 @@ import os
 from datetime import datetime, timezone
 from typing import List
 
-from bson import ObjectId
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
@@ -61,16 +60,12 @@ Try to balance unit coverage and avoid repeating the same question.
 
 
 async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> dict:
-    """
-    Use an LLM to select questions from the question_bank collection according
-    to the provided template, then persist a final_question_paper document.
-    """
+    """Select bank questions with an LLM and persist a final paper."""
     cursor = question_bank_collection.find({"syllabus_id": template.syllabus_id})
     bank_docs = await cursor.to_list(length=1000)
     if not bank_docs:
         raise ValueError("Question bank is empty for this syllabus. Generate it first.")
 
-    # Prepare compact JSON for the model
     bank_payload = [
         {
             "id": str(d["_id"]),
@@ -116,14 +111,6 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
         logger.error("Failed to parse question paper selection JSON: %s", e)
         raise ValueError("LLM returned invalid JSON while selecting questions for paper")
 
-    # Look up the selected questions and build the final paper structure
-    selected_ids: List[str] = []
-    for sec in sections:
-        for q in sec.get("questions", []):
-            qid = q.get("id")
-            if qid and qid not in selected_ids:
-                selected_ids.append(qid)
-
     bank_by_id = {str(d["_id"]): d for d in bank_docs}
     questions: List[PaperQuestion] = []
     q_number = 1
@@ -153,7 +140,6 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
 
     paper_doc = {
         "syllabus_id": template.syllabus_id,
-        "blueprint_id": "",  # not used in the new pipeline
         "exam_title": template.title,
         "total_marks": total_marks,
         "duration_minutes": 180,
@@ -165,4 +151,3 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
     paper_doc["_id"] = result.inserted_id
     logger.info("Generated paper with %d questions and %d total marks", len(questions), total_marks)
     return paper_doc
-

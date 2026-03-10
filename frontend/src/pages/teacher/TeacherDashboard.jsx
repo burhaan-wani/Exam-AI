@@ -4,8 +4,7 @@ import { toast } from 'sonner'
 import { syllabusAPI } from '@/api/client'
 import Button from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
-import Badge from '@/components/ui/Badge'
-import { FileText, Upload, Settings, Sparkles, ClipboardList } from 'lucide-react'
+import { FileText, Upload, LibraryBig, ArrowRight } from 'lucide-react'
 
 const TeacherDashboard = () => {
   const [syllabi, setSyllabi] = useState([])
@@ -27,67 +26,84 @@ const TeacherDashboard = () => {
     }
   }
 
-  const steps = [
+  const workflowCards = [
     {
-      num: 1,
-      title: 'Upload Syllabus',
-      description: 'Upload your course syllabus (PDF, DOCX, or TXT)',
-      path: '/upload-syllabus',
+      title: '1. Upload syllabus',
+      description: 'Add the syllabus and any supporting material you want the generator to use.',
       icon: Upload,
+      action: '/upload-syllabus',
+      actionLabel: 'Upload files',
     },
     {
-      num: 2,
-      title: 'Question Bank',
-      description: 'Generate and manage AI question banks',
-      path: '/dashboard', // syllabus-specific links are shown below
-      icon: Sparkles,
+      title: '2. Build question bank',
+      description: 'Generate a bank of Bloom-aligned questions for each extracted unit.',
+      icon: LibraryBig,
+      action: syllabi[0] ? `/question-bank/${syllabi[0].id}` : '/upload-syllabus',
+      actionLabel: syllabi[0] ? 'Open latest bank' : 'Start with a syllabus',
     },
     {
-      num: 3,
-      title: 'Generate Paper',
-      description: 'Build papers from the question bank',
-      path: '/dashboard',
+      title: '3. Assemble and refine paper',
+      description: 'Create a paper from the bank, then replace any question you do not like in the final view.',
       icon: FileText,
+      action: syllabi[0] ? `/question-bank/${syllabi[0].id}` : '/upload-syllabus',
+      actionLabel: 'Continue workflow',
     },
   ]
 
   return (
     <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900 mb-2">Teacher Dashboard</h1>
-        <p className="text-gray-600">Welcome, {user.name}! Manage your exam papers here.</p>
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Teacher Dashboard</h1>
+          <p className="text-gray-600">Welcome, {user.name}! The teacher workflow now runs entirely through the question bank pipeline.</p>
+        </div>
+        <Link to="/upload-syllabus">
+          <Button>
+            <Upload size={18} className="mr-2" />
+            New syllabus
+          </Button>
+        </Link>
       </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {steps.map(({ num, title, path, icon: Icon }) => (
-          <Link key={num} to={path}>
-            <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer">
-              <CardContent className="p-4 flex flex-col items-center text-center">
-                <div className="mb-3 p-3 bg-slate-100 rounded-lg">
-                  <Icon className="w-6 h-6 text-slate-900" />
-                </div>
-                <span className="inline-block mb-2 text-xs font-bold text-slate-500">Step {num}</span>
-                <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
-              </CardContent>
-            </Card>
-          </Link>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {workflowCards.map(({ title, description, icon: Icon, action, actionLabel }) => (
+          <Card key={title} className="h-full">
+            <CardHeader>
+              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mb-3">
+                <Icon className="w-6 h-6 text-slate-900" />
+              </div>
+              <CardTitle className="text-xl">{title}</CardTitle>
+              <CardDescription>{description}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link to={action}>
+                <Button variant="outline" className="w-full justify-between">
+                  {actionLabel}
+                  <ArrowRight size={16} />
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* Syllabi List */}
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Your Syllabi</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Your syllabi</h2>
+            <p className="text-sm text-gray-600">Each syllabus is an entry point into the new teacher workflow.</p>
+          </div>
+        </div>
+
         {loading ? (
           <div className="text-center text-gray-500 py-8">Loading...</div>
         ) : syllabi.length === 0 ? (
           <Card>
             <CardContent className="p-8 text-center">
               <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <p className="text-gray-600 mb-4">No syllabi uploaded yet</p>
+              <p className="text-gray-600 mb-4">No syllabi uploaded yet.</p>
               <Link to="/upload-syllabus">
-                <Button>Upload Your First Syllabus</Button>
+                <Button>Upload your first syllabus</Button>
               </Link>
             </CardContent>
           </Card>
@@ -98,22 +114,17 @@ const TeacherDashboard = () => {
                 <CardHeader>
                   <CardTitle className="text-lg">{syllabus.filename}</CardTitle>
                   <CardDescription>
-                    {syllabus.topic_count} topics â€¢ {new Date(syllabus.created_at).toLocaleDateString()}
+                    {syllabus.topic_count} units extracted
+                    {syllabus.created_at ? ` • ${new Date(syllabus.created_at).toLocaleDateString()}` : ''}
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Link to={`/question-bank/${syllabus.id}`} className="flex-1">
-                      <Button variant="secondary" className="w-full text-sm">
-                        Question Bank
-                      </Button>
-                    </Link>
-                    <Link to={`/upload-syllabus?view=${syllabus.id}`} className="flex-1">
-                      <Button variant="outline" className="w-full text-sm">
-                        View
-                      </Button>
-                    </Link>
-                  </div>
+                <CardContent className="flex gap-3">
+                  <Link to={`/question-bank/${syllabus.id}`} className="flex-1">
+                    <Button className="w-full">Open question bank</Button>
+                  </Link>
+                  <Link to="/upload-syllabus" className="flex-1">
+                    <Button variant="outline" className="w-full">Upload more files</Button>
+                  </Link>
                 </CardContent>
               </Card>
             ))}

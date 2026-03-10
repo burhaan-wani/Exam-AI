@@ -1,10 +1,6 @@
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
+from pydantic import BaseModel
 from enum import Enum
 
-
-# ── Enums ──────────────────────────────────────────────────────────────────────
 
 class BloomLevel(str, Enum):
     REMEMBER = "Remember"
@@ -15,20 +11,10 @@ class BloomLevel(str, Enum):
     CREATE = "Create"
 
 
-class QuestionStatus(str, Enum):
-    PENDING = "pending"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    MODIFIED = "modified"
-    REGENERATE = "regenerate"
-
-
 class UserRole(str, Enum):
     TEACHER = "teacher"
     STUDENT = "student"
 
-
-# ── User ───────────────────────────────────────────────────────────────────────
 
 class UserCreate(BaseModel):
     name: str
@@ -55,8 +41,6 @@ class TokenResponse(BaseModel):
     user: UserOut
 
 
-# ── Syllabus ───────────────────────────────────────────────────────────────────
-
 class TopicItem(BaseModel):
     name: str
     unit: str = ""
@@ -79,81 +63,12 @@ class SyllabusListItem(BaseModel):
     created_at: str
 
 
-# ── Bloom Configuration ───────────────────────────────────────────────────────
-
-class BloomConfig(BaseModel):
-    topic: str
-    bloom_level: BloomLevel
-    num_questions: int = 2
-    marks_per_question: int = 5
-    difficulty: str = "medium"  # easy, medium, hard
-
-
-class BlueprintCreate(BaseModel):
-    syllabus_id: str
-    exam_title: str = "Examination"
-    total_marks: int = 100
-    duration_minutes: int = 180
-    configs: list[BloomConfig]
-
-
-class BlueprintOut(BaseModel):
-    id: str
-    syllabus_id: str
-    exam_title: str
-    total_marks: int
-    duration_minutes: int
-    configs: list[BloomConfig]
-    created_at: str
-
-
-# ── Generated Questions ───────────────────────────────────────────────────────
-
 class SubQuestion(BaseModel):
-    label: str = ""  # e.g. "(a)", "(b)"
+    label: str = ""
     text: str
     marks: int = 0
     model_answer: str = ""
 
-
-class GeneratedQuestion(BaseModel):
-    id: str = ""
-    syllabus_id: str = ""
-    blueprint_id: str = ""
-    topic: str
-    bloom_level: BloomLevel
-    difficulty: str = "medium"
-    question_text: str
-    sub_questions: list[SubQuestion] = []
-    marks: int
-    model_answer: str = ""
-    status: QuestionStatus = QuestionStatus.PENDING
-    created_at: str = ""
-
-
-class QuestionGenerateRequest(BaseModel):
-    blueprint_id: str
-
-
-# ── HITL Feedback ──────────────────────────────────────────────────────────────
-
-class HITLAction(BaseModel):
-    question_id: str
-    action: QuestionStatus  # approved, rejected, modified, regenerate
-    modified_text: Optional[str] = None
-    feedback_note: Optional[str] = None
-
-
-class HITLFeedbackOut(BaseModel):
-    id: str
-    question_id: str
-    action: str
-    modified_text: Optional[str] = None
-    feedback_note: Optional[str] = None
-    created_at: str
-
-
-# ── Final Question Paper ──────────────────────────────────────────────────────
 
 class PaperQuestion(BaseModel):
     question_number: int
@@ -170,19 +85,12 @@ class PaperQuestion(BaseModel):
 class FinalPaperOut(BaseModel):
     id: str
     syllabus_id: str
-    blueprint_id: str
     exam_title: str
     total_marks: int
     duration_minutes: int
     questions: list[PaperQuestion]
     created_at: str
 
-
-class AssemblePaperRequest(BaseModel):
-    blueprint_id: str
-
-
-# ── Student Answers ───────────────────────────────────────────────────────────
 
 class AnswerItem(BaseModel):
     question_number: int
@@ -202,8 +110,6 @@ class StudentAnswerOut(BaseModel):
     answers: list[AnswerItem]
     submitted_at: str
 
-
-# ── Evaluation Results ────────────────────────────────────────────────────────
 
 class QuestionScore(BaseModel):
     question_number: int
@@ -233,9 +139,6 @@ class EvaluateRequest(BaseModel):
     answer_id: str
 
 
-# ── Question Bank & Documents (Two-stage pipeline) ──────────────────────────────
-
-
 class QuestionBankItem(BaseModel):
     id: str = ""
     question: str
@@ -250,12 +153,6 @@ class QuestionBankItem(BaseModel):
 
 class QuestionBankCreateRequest(BaseModel):
     syllabus_id: str
-
-
-class QuestionBankListQuery(BaseModel):
-    syllabus_id: str
-    unit: str | None = None
-    bloom_level: BloomLevel | None = None
 
 
 class DocumentOut(BaseModel):
