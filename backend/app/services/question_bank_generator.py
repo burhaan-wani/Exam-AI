@@ -120,10 +120,14 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
             docs = await retriever.ainvoke(unit_name)
             context_text = "\n\n".join(d.page_content for d in docs)
 
-        prompt = QUESTION_BANK_TEMPLATE.format(unit_name=unit_name, context=context_text)
+        # Build chat messages from the template
+        messages = QUESTION_BANK_TEMPLATE.format_messages(
+            unit_name=unit_name,
+            context=context_text,
+        )
 
         def _run() -> str:
-            resp = llm.invoke(prompt.to_messages())
+            resp = llm.invoke(messages)
             return resp.content or ""
 
         raw = await asyncio.to_thread(_run)

@@ -94,13 +94,13 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
     }
 
     llm = _get_chat_model()
-    prompt = PAPER_SELECTION_TEMPLATE.format(
+    messages = PAPER_SELECTION_TEMPLATE.format_messages(
         question_bank=json.dumps(bank_payload, indent=2),
         template=json.dumps(template_payload, indent=2),
     )
 
     def _run() -> str:
-        resp = llm.invoke(prompt.to_messages())
+        resp = llm.invoke(messages)
         return resp.content or ""
 
     raw = await asyncio.to_thread(_run)
