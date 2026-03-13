@@ -1,383 +1,179 @@
 # Installation Guide - Exam AI
 
-Complete step-by-step guide to set up and run the Exam AI application.
+This guide sets up the current Exam AI application, which uses the question-bank teacher workflow, OpenRouter-backed LLM calls, MongoDB, and a React frontend.
 
 ## Prerequisites
 
-Before starting, ensure you have:
+Install these first:
 
-1. **Python 3.9 or higher**
-   ```bash
-   python --version  # or python3 --version
-   ```
+1. Python 3.9+
+2. Node.js 16+
+3. MongoDB (local or Atlas)
+4. OpenRouter API key: https://openrouter.ai/keys
 
-2. **Node.js 16 or higher**
-   ```bash
-   node --version
-   npm --version
-   ```
+Helpful checks:
 
-3. **MongoDB**
-   - Local installation: https://docs.mongodb.com/manual/installation/
-   - Or MongoDB Atlas (Cloud): https://www.mongodb.com/cloud/atlas
+```bash
+python --version
+node --version
+npm --version
+```
 
-4. **OpenAI API Key**
-   - Get it from: https://platform.openai.com/api-keys
-   - Ensure you have sufficient credits/quota
+## Quick Start
 
-## Quick Start (Recommended)
-
-### For Windows
+### Windows
 ```bash
 cd exam-ai
 setup.bat
 ```
 
-### For macOS/Linux
+### macOS / Linux
 ```bash
 cd exam-ai
 chmod +x setup.sh
 ./setup.sh
 ```
 
-Then follow the instructions in the script output.
-
----
+The setup scripts prepare dependencies and copy the backend environment file if needed.
 
 ## Manual Installation
 
-### Step 1: Clone/Prepare the Repository
+### 1. Backend setup
 
-```bash
-cd exam-ai
-```
-
-### Step 2: Backend Setup
-
-#### 2.1 Create Virtual Environment
-
-**Windows:**
 ```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate
-```
-
-**macOS/Linux:**
-```bash
-cd backend
-python3 -m venv venv
 source venv/bin/activate
-```
-
-#### 2.2 Install Dependencies
-
-```bash
 pip install -r requirements.txt
-```
-
-#### 2.3 Configure Environment Variables
-
-Create a `.env` file in the `backend` directory:
-
-```bash
-# Copy from example
 cp .env.example .env
 ```
 
-Edit `.env` and fill in your settings:
+On Windows activation is:
+
+```bash
+venv\Scripts\activate
+```
+
+### 2. Configure backend environment
+
+Edit `backend/.env`:
 
 ```env
-# MongoDB Configuration
 MONGODB_URL=mongodb://localhost:27017
 DATABASE_NAME=exam_ai
-
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-actual-api-key-here
-OPENAI_MODEL=gpt-4-mini
-
-# JWT Configuration
+OPENROUTER_API_KEY=your-openrouter-key
+OPENROUTER_MODEL=openai/gpt-oss-120b:free
 SECRET_KEY=your-super-secret-key-change-in-production
 ACCESS_TOKEN_EXPIRE_MINUTES=480
-
-# CORS Configuration
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+CORS_ORIGINS=http://localhost:5173
 ```
 
-**Important Settings Explanation:**
+Variable notes:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `MONGODB_URL` | MongoDB connection string | `mongodb://localhost:27017` or MongoDB Atlas URL |
-| `OPENAI_API_KEY` | Your OpenAI API key | `sk-...` |
-| `OPENAI_MODEL` | Model to use | `gpt-4-mini` (or `gpt-4-turbo`) |
-| `SECRET_KEY` | JWT signing key | Any random string, 32+ chars recommended |
-| `CORS_ORIGINS` | Frontend URL for API access | `http://localhost:5173` during development |
+| Variable | Purpose |
+|----------|---------|
+| `MONGODB_URL` | MongoDB connection string |
+| `DATABASE_NAME` | Database name |
+| `OPENROUTER_API_KEY` | API key for chat model access via OpenRouter |
+| `OPENROUTER_MODEL` | Chat model identifier |
+| `SECRET_KEY` | JWT signing secret |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token lifetime |
+| `CORS_ORIGINS` | Allowed frontend origins |
 
-#### 2.4 Verify MongoDB Connection
-
-Make sure MongoDB is running:
-
-**Local MongoDB:**
-```bash
-# macOS (if installed via Homebrew)
-brew services start mongodb-community
-
-# Linux
-sudo systemctl start mongod
-
-# Windows (MongoDB Community Server)
-# MongoDB should start as a service automatically
-# Or from Command Prompt:
-net start MongoDB
-```
-
-**MongoDB Atlas (Cloud):**
-Use connection string like:
-```
-mongodb+srv://username:password@cluster.mongodb.net/?retryWrites=true&w=majority
-```
-
-#### 2.5 Start Backend Server
+### 3. Start backend
 
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-You should see:
-```
-Uvicorn running on http://127.0.0.1:8000
-```
+Backend URLs:
+- API: `http://localhost:8000`
+- Swagger docs: `http://localhost:8000/docs`
 
-**API Documentation:** Visit `http://localhost:8000/docs` to see all endpoints
+### 4. Frontend setup
 
-### Step 3: Frontend Setup
-
-#### 3.1 Install Dependencies
-
-In a **new terminal** (keep backend running):
+In a new terminal:
 
 ```bash
 cd frontend
 npm install
+npm run dev
 ```
 
-#### 3.2 Configure Environment (Optional)
-
-Create `.env.local` in the `frontend` directory:
+Optional frontend env file:
 
 ```env
 VITE_API_URL=http://localhost:8000/api
 ```
 
-(This is optional - defaults to localhost:8000)
+Frontend URL:
+- `http://localhost:5173`
 
-#### 3.3 Start Development Server
+## First Run Workflow
 
-```bash
-npm run dev
-```
+### Teacher
+1. Register as a teacher.
+2. Upload a syllabus.
+3. Upload optional reference material.
+4. Generate a question bank.
+5. Generate a paper.
+6. Replace questions if needed.
+7. Share/export the paper.
 
-You should see:
-```
-VITE v5.0.0  ready in XXX ms
-
-➜  Local:   http://localhost:5173/
-```
-
-### Step 4: Access the Application
-
-Open your browser and navigate to: **http://localhost:5173**
-
-## First Time Setup - Create Test User
-
-1. Go to **Register** page
-2. Create an account (teacher role for testing)
-3. Or use test credentials if backend is configured with them
+### Student
+1. Register as a student.
+2. Open a shared paper.
+3. Submit answers.
+4. Trigger evaluation.
+5. Review results.
 
 ## Troubleshooting
 
-### MongoDB Connection Error
+### MongoDB connection errors
+- Make sure MongoDB is running locally, or that your Atlas connection string is valid.
+- Confirm `MONGODB_URL` in `backend/.env`.
 
-**Error:** `ServerSelectionTimeoutError`
+### OpenRouter authentication errors
+- Confirm `OPENROUTER_API_KEY` is set correctly.
+- Make sure the key has available credits/access.
+- Confirm `OPENROUTER_MODEL` is a chat model, not an embedding model.
 
-**Solution:**
-- Check if MongoDB is running
-- Verify connection string in `.env`
-- For Atlas, ensure IP whitelist includes your machine's IP (0.0.0.0/0 for development)
+### CORS errors
+- Add the frontend URL to `CORS_ORIGINS`.
+- Restart the backend after changing `.env`.
 
-### OpenAI API Error
+### Python or npm not found in the terminal
+If the tools are installed but not found, fix your shell `PATH` or run them by absolute path. Restart the terminal after changing PATH.
 
-**Error:** `AuthenticationError: Incorrect API key provided`
+### Port already in use
+Use alternate ports if needed:
 
-**Solution:**
-- Verify API key in `.env`
-- Check API key is active in OpenAI dashboard
-- Ensure no extra spaces in the key
-
-### CORS Error in Browser
-
-**Error:** `Access to XMLHttpRequest at 'http://localhost:8000...' blocked by CORS`
-
-**Solution:**
-- Add frontend URL to `CORS_ORIGINS` in backend `.env`
-- Example: `CORS_ORIGINS=http://localhost:5173`
-- Restart backend server
-
-### Port Already in Use
-
-**Error:** `Address already in use`
-
-**Solution:**
 ```bash
-# Change backend port
 uvicorn app.main:app --reload --port 8001
-
-# Change frontend port
 npm run dev -- --port 5174
 ```
 
-### Module Not Found Error
+## Production Notes
 
-**Error:** `ModuleNotFoundError: No module named 'app'`
+### Backend
+- Use a strong `SECRET_KEY`.
+- Set `CORS_ORIGINS` to your deployed frontend URL.
+- Point `MONGODB_URL` to production MongoDB.
+- Run behind a production ASGI server such as Gunicorn/Uvicorn workers.
 
-**Solution:**
+### Frontend
+- Build with:
+
 ```bash
-# Make sure you're in the backend directory
-cd backend
-# And virtual environment is activated
-source venv/bin/activate  # macOS/Linux
-# or
-venv\Scripts\activate  # Windows
+npm run build
 ```
 
-### Permission Denied (setup.sh)
+- Set `VITE_API_URL` to your deployed backend.
 
-**Error:** `Permission denied: ./setup.sh`
+## Current Implementation Notes
 
-**Solution:**
-```bash
-chmod +x setup.sh
-./setup.sh
-```
-
-### Rust Compilation Error (Windows)
-
-**Error:** `Cargo, the Rust package manager, is not installed` or `pydantic-core` build fails
-
-**Solution (Choose One):**
-
-**Option A: Install Rust (Recommended)**
-1. Download from https://rustup.rs/
-2. Run the installer and follow prompts
-3. Restart your terminal
-4. Retry: `pip install -r requirements.txt`
-
-**Option B: Use Pre-built Wheels** (Already done in latest requirements.txt)
-- Just reinstall: `pip install -r requirements.txt`
-
-**Option C: Use Anaconda**
-```bash
-conda create -n exam-ai python=3.9
-conda activate exam-ai
-cd backend
-pip install -r requirements.txt
-```
-
-## Production Deployment
-
-### Backend Deployment
-
-1. **Update `.env`:**
-   ```env
-   SECRET_KEY=<very-long-random-string>
-   CORS_ORIGINS=https://yourdomain.com
-   ```
-
-2. **Use production ASGI server:**
-   ```bash
-   pip install gunicorn
-   gunicorn app.main:app --workers 4 --bind 0.0.0.0:8000
-   ```
-
-3. **Use external MongoDB:**
-   ```env
-   MONGODB_URL=mongodb+srv://user:pass@cluster.mongodb.net/
-   ```
-
-### Frontend Deployment
-
-1. **Build for production:**
-   ```bash
-   npm run build
-   ```
-
-2. **Deploy `dist/` folder** to:
-   - Vercel, Netlify, AWS S3, etc.
-
-3. **Update API URL:**
-   Create `.env.production`:
-   ```env
-   VITE_API_URL=https://api.yourdomain.com
-   ```
-
-## Docker Support (Optional)
-
-### Docker Setup
-
-Create `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-services:
-  mongodb:
-    image: mongo:latest
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_DATABASE: exam_ai
-
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    depends_on:
-      - mongodb
-    environment:
-      MONGODB_URL: mongodb://mongodb:27017
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "5173:5173"
-    depends_on:
-      - backend
-```
-
-Run with:
-```bash
-docker-compose up
-```
-
-## Next Steps
-
-1. **Create a syllabus** - Upload your first course syllabus
-2. **Configure Bloom levels** - Set up question difficulty
-3. **Generate questions** - Create exam questions with AI
-4. **Review & refine** - Use HITL to improve questions
-5. **Share paper** - Generate and share with students
-6. **Evaluate answers** - Let AI evaluate student responses
-
-## Getting Help
-
-- **API Documentation:** http://localhost:8000/docs
-- **GitHub Issues:** [Create an issue]
-- **Documentation:** See README.md
-
-## Support Links
-
-- OpenAI Documentation: https://platform.openai.com/docs/
-- MongoDB Docs: https://docs.mongodb.com/
-- FastAPI Docs: https://fastapi.tiangolo.com/
-- React Docs: https://react.dev/
+- The legacy teacher blueprint/HITL flow has been removed.
+- The teacher workflow now runs through the question bank pipeline only.
+- Retrieval persists per syllabus using a Chroma-backed vector store.
+- Backend auth and role checks are enforced server-side.
+- Frontend PDF export is implemented.

@@ -1,385 +1,113 @@
-# Exam AI - Features Overview
+# Exam AI Features Overview
 
-## Core Features
+## Core Product Features
 
-### 1. Question Paper Generation with Bloom's Taxonomy
+### Teacher question-bank workflow
+- Upload syllabus files in PDF, DOCX, or TXT format.
+- Extract units/topics with an LLM.
+- Upload optional course material for retrieval-augmented generation.
+- Persist reference embeddings per syllabus in a Chroma vector store.
+- Generate a structured question bank across Bloom levels.
+- Build a final question paper from the question bank.
+- Replace individual paper questions directly from the final review screen.
+- Export the final paper as PDF from the frontend.
 
-#### Topic Extraction
-- **Automatic**: Upload PDF, DOCX, or TXT syllabus
-- AI-powered extraction of topics, units, and subtopics
-- Structured data ready for question generation
+### Student answer workflow
+- Open a generated paper.
+- Submit descriptive answers.
+- Trigger LLM-assisted evaluation.
+- View total score, per-question feedback, and scoring metrics.
 
-#### Bloom's Taxonomy Mapping
-- Map each topic to cognitive levels:
-  - **Remember**: Recall facts and basic concepts (Question starters: Define, List, Recall)
-  - **Understand**: Explain ideas in own words (Explain, Describe, Summarize)
-  - **Apply**: Use information in new situations (Solve, Demonstrate, Calculate)
-  - **Analyze**: Draw connections and break apart (Compare, Contrast, Examine)
-  - **Evaluate**: Make judgments (Justify, Critique, Defend)
-  - **Create**: Produce new work (Design, Develop, Formulate)
+## AI and Retrieval Features
 
-#### Automated Mark Allocation
-- Intelligent distribution across topics
-- Difficulty-based weighting
-- Automatic calculation of marks per question
+### LLM usage
+- OpenRouter-backed chat models are used for:
+  - syllabus topic extraction
+  - question-bank generation
+  - final paper selection
+  - rubric extraction
+  - answer evaluation
 
-#### LLM-Powered Question Generation
-- Generate multiple-part questions
-- Include sub-questions (a), (b), (c)...
-- Automatic model answer generation
-- Bloom-level aligned terminology
+### Retrieval-augmented generation
+- Uploaded reference materials are stored in MongoDB.
+- Extracted text is indexed into a persistent Chroma vector store per syllabus.
+- Question-bank generation retrieves relevant chunks by unit before prompting the model.
 
-### 2. Human-in-the-Loop (HITL) Review System
-
-#### Question Review Actions
-- **Approve**: Accept generated questions as-is
-- **Reject**: Discard questions and generate new ones
-- **Request Changes**: Provide feedback for regeneration
-- **Modify Directly**: Edit question text while approving
-
-#### Feedback Loop
-- Track all review actions
-- Regenerate questions based on specific feedback
-- Iterative refinement until satisfaction
-- Complete feedback history
-
-#### Progress Tracking
-- Visual progress indicator
-- Count of approved vs total questions
-- Status badges (pending, approved, rejected)
-
-### 3. Question Paper Assembly
-
-#### A4-Formatted Paper Layout
-- Professional exam paper format
-- Clear question hierarchy
-- Marks clearly indicated
-- Proper spacing for student answers
-- Answer space guidelines
-
-#### Paper Customization
-- Custom exam titles
-- Configurable duration
-- Total marks display
-- Instructions section
-- Metadata (topic, Bloom level, date)
-
-#### Sharing & Distribution
-- Generate shareable links
-- Share with students
-- Print-friendly layout
-- PDF export (coming soon)
-
-### 4. Descriptive Answer Evaluation
-
-#### LLM-Based Scoring
-- Compare student answers to model answers
-- Rubric-based evaluation
-- Multi-criteria assessment
-
-#### Evaluation Metrics
-1. **Semantic Similarity** (0-100%)
-   - How closely student answer matches model answer
-   - Meaning-based comparison
-
-2. **Completeness** (0-100%)
-   - How many key points are covered
-   - Extent of answer coverage
-
-3. **Bloom Alignment** (0-100%)
-   - Does answer match expected cognitive level?
-   - Quality vs quantity assessment
-
-4. **Logic & Reasoning**
-   - Is answer well-structured?
-   - Sound logical flow
-   - Proper reasoning
-
-#### Intelligent Marking
-- Partial marks for partial answers
-- Caps marks at maximum
-- Proportional weighting
-- Grade calculation
-
-#### Comprehensive Feedback
-- Individual question feedback
-- Scoring rationale
-- Overall grade and suggestions
-- Constructive recommendations
-
-### 5. User Management
-
-#### Role-Based Access
-- **Teacher Role**:
-  - Upload syllabi
-  - Configure exams
-  - Generate and review questions
-  - Assemble papers
-  - View student results
-
-- **Student Role**:
-  - Access shared papers
-  - Submit answers
-  - View evaluation results
-  - Track progress
-
-#### Authentication
-- Secure registration
-- Email-based login
-- JWT token-based sessions
-- Password hashing with bcrypt
-
-### 6. Data Management
-
-#### MongoDB Database
-- Persistent storage
-- Indexed collections
-- Automated relationships
-- Scalable design
-
-#### Collections
-- **users**: User accounts and roles
-- **syllabus**: Course syllabi
-- **question_blueprint**: Exam configurations
-- **generated_questions**: AI-created questions
-- **hitl_feedback**: Review actions
-- **final_question_paper**: Assembled papers
-- **student_answers**: Answer submissions
-- **evaluation_results**: Evaluation results
-
-## Advanced Features
-
-### LangChain Integration
-
-#### Generation Chain
-- Multi-step question generation
-- Prompt templating
-- JSON output parsing
-- Error handling
-
-#### Refinement Chain
-- Question improvement pipeline
-- Feedback incorporation
-- Bloom-level preservation
-- Automatic retry logic
-
-#### Evaluation Chain
-- Rubric extraction
-- Multi-step scoring
-- Comprehensive assessment
-- Feedback generation
-
-### Error Handling & Logging
-- Structured logging
-- Error tracking
-- API error messages
-- Detailed debug info
-
-### CORS & Security
-- Cross-origin request handling
-- Token-based authentication
-- Secure password storage
-- Environment-based configuration
-
-## User Interfaces
-
-### Teacher Dashboard
-- Quick navigation to main workflows
-- View uploaded syllabi
-- Manage multiple blueprints
-- Track question generation progress
-
-### Question Paper View
-- A4-sized display
-- Beautiful typography
-- Print optimization
-- Share functionality
-
-### HITL Review Interface
-- Visual question display
-- Batch review actions
-- Feedback input
-- Progress tracking
-
-### Student Portal
-- Clean answer submission form
-- Question display
-- Text input for answers
-- Submission confirmation
-
-### Evaluation Results
-- Score breakdown by question
-- Visual metrics (bar charts)
-- Detailed feedback
-- Performance analytics
-
-## Performance Features
-
-### Async Operations
-- Asynchronous API calls
-- Non-blocking LLM requests
-- Efficient database queries
-- Optimized file processing
-
-### Caching & Optimization
-- Database indexing
-- Efficient queries
-- Minimal data transfer
-- Fast page loads
-
-## Extensibility
-
-### API-Driven Architecture
-- RESTful API design
-- Easy integration points
-- Webhooks support (future)
-- Third-party integration ready
-
-### Customization Options
-- Custom exam titles
-- Flexible mark allocation
-- Configurable Bloom levels
-- Adjustable difficulty
-
-### Future Enhancement Support
-- PDF export ready
-- Mobile app compatible
-- Analytics dashboard ready
-- LMS integration possible
-
-## Accessibility Features
-
-### Responsive Design
-- Works on desktop and tablet
-- Mobile-friendly (coming soon)
-- Touch-friendly buttons
-- Readable typography
-
-### Accessibility Standards
-- Semantic HTML
-- ARIA labels (planned)
-- Keyboard navigation
-- High contrast options (planned)
+### Evaluation metrics
+- Semantic similarity
+- Completeness
+- Bloom alignment
+- Reasoning and feedback generation
 
 ## Security Features
 
-### Authentication & Authorization
-- Secure JWT tokens
-- Password hashing
-- Token expiration
-- Role-based access
+### Authentication
+- JWT-based authentication
+- Password hashing with bcrypt/passlib
+- Backend enforcement of auth on protected routes
 
-### Data Protection
-- Encrypted storage (planned)
-- Secure API endpoints
-- Input validation
-- SQL injection prevention
+### Authorization
+- Teacher-only syllabus and question-bank routes
+- Student-only answer submission/evaluation routes
+- Server-side ownership checks for syllabi, papers, submissions, and results
 
-### Audit Trail
-- Complete feedback history
-- Timestamp tracking
-- User action logging
-- Change tracking
+## Frontend Features
 
-## Integration Capabilities
+### Teacher UI
+- Dashboard centered on the new question-bank workflow
+- Syllabus upload screen with optional reference material upload
+- Question bank management and generation flow
+- Final paper view with replace-question actions
+- PDF export and share-link support
 
-### Supported File Formats
-- PDF (via PyPDF2)
-- DOCX (via python-docx)
-- TXT (plain text)
+### Student UI
+- Answer submission interface
+- Results page with question-wise score cards
 
-### LLM Models
-- OpenAI GPT-4
-- OpenAI GPT-4 Mini
-- Extensible for other models
+## Current Status Table
 
-### Database Support
-- MongoDB (primary)
-- Atlas cloud option
-- Self-hosted option
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Syllabus upload | Ready | PDF, DOCX, TXT |
+| Unit extraction | Ready | LLM-based |
+| Reference material upload | Ready | Indexed into persistent retrieval store |
+| Persistent RAG | Ready | Chroma-backed per syllabus |
+| Question bank generation | Ready | New teacher pipeline |
+| Final paper generation | Ready | From question bank |
+| Question replacement | Ready | Teacher final review action |
+| PDF export | Ready | Frontend export via html2pdf.js |
+| Student submission | Ready | Authenticated student flow |
+| AI evaluation | Ready | Rubric + scoring prompt |
+| Backend auth enforcement | Ready | JWT + role checks |
+| Automated tests | Pending | Not added yet |
+| Analytics dashboard | Planned | Future work |
+| LMS integration | Planned | Future work |
+| Mobile app | Planned | Future work |
 
-## Performance Benchmarks
+## Architecture Notes
 
-- Question generation: ~5-10 seconds per question
-- Answer evaluation: ~3-5 seconds per answer
-- Paper assembly: <1 second for up to 100 questions
-- Topic extraction: ~2-3 seconds per syllabus
+The current application no longer includes the legacy blueprint/HITL teacher pipeline. The active teacher flow is:
 
-## Scalability
+```text
+Upload syllabus
+-> Upload reference material (optional)
+-> Generate question bank
+-> Generate paper
+-> Replace questions if needed
+-> Share/export paper
+```
 
-- Async backend handles concurrent requests
-- Horizontal scaling ready
-- Database indexing for fast queries
-- Efficient resource usage
+Student flow:
 
-## Support for Large-Scale Exams
+```text
+Open paper
+-> Submit answers
+-> Evaluate
+-> View results
+```
 
-- Handle syllabi with 100+ topics
-- Generate 1000+ questions
-- Evaluate 1000+ answers
-- Store unlimited data (with infrastructure scaling)
-
----
-
-## Feature Comparison
-
-| Feature | Status | Details |
-|---------|--------|---------|
-| Syllabus Upload | ✅ Ready | PDF, DOCX, TXT support |
-| Topic Extraction | ✅ Ready | AI-powered |
-| Bloom Configuration | ✅ Ready | All 6 levels |
-| Question Generation | ✅ Ready | LLM-powered |
-| HITL Review | ✅ Ready | Approve, Reject, Modify, Regenerate |
-| Paper Assembly | ✅ Ready | A4 layout |
-| Answer Submission | ✅ Ready | Multi-question support |
-| AI Evaluation | ✅ Ready | 4 scoring metrics |
-| Results Display | ✅ Ready | Detailed feedback |
-| PDF Export | 🔄 Planned | Coming soon |
-| Mobile App | 🔄 Planned | React Native |
-| Analytics Dashboard | 🔄 Planned | Teacher analytics |
-| LMS Integration | 🔄 Planned | Canvas, Blackboard |
-| Multi-language Support | 🔄 Planned | i18n support |
-
----
-
-## Use Cases
-
-### Academic Institutions
-- Auto-generate exams from syllabi
-- Reduce question paper preparation time
-- Ensure Bloom's Taxonomy alignment
-- Automated answer evaluation
-
-### Corporate Training
-- Generate certification exams
-- Evaluate training comprehension
-- Multiple difficulty levels
-- Performance analytics
-
-### Online Learning Platforms
-- Create course assessments
-- Automated grading
-- Student feedback
-- Learning outcome tracking
-
-### Tutoring Services
-- Generate practice questions
-- Evaluate student responses
-- Identify weak areas
-- Personalized feedback
-
----
-
-## Getting Started
-
-1. **Register** as a teacher
-2. **Upload** your course syllabus
-3. **Configure** Bloom levels for each topic
-4. **Generate** questions using AI
-5. **Review** and refine questions (HITL)
-6. **Assemble** final question paper
-7. **Share** link with students
-8. **Evaluate** their answers automatically
-9. **Provide** detailed feedback
-
-See INSTALLATION.md for setup instructions and README.md for architecture details.
+## Known Remaining Gaps
+- No automated test suite yet.
+- No teacher analytics/reporting UI yet.
+- Retrieval is persistent, but operational tooling for reindex/rebuild is still minimal.
+- Documentation now reflects current code, but older historical summary files may still be archival rather than authoritative.
