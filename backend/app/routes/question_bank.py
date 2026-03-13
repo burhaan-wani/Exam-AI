@@ -7,9 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from app.database import syllabus_collection, question_bank_collection, documents_collection, final_question_paper_collection
 from app.dependencies.auth import require_teacher
 from app.models.schemas import QuestionBankItem, QuestionBankCreateRequest, QuestionPaperTemplate
+from app.services.document_loader import build_langchain_documents, mark_reference_document_indexed, save_reference_document
 from app.services.paper_generator import generate_paper_from_question_bank
 from app.services.question_bank_generator import generate_question_bank_for_syllabus
 from app.services.syllabus_parser import parse_syllabus_units
+from app.services.vector_store import upsert_syllabus_documents
 from app.utils.file_parser import extract_text
 
 logger = logging.getLogger(__name__)
@@ -153,32 +155,41 @@ async def upload_reference_material(
     file: UploadFile = File(...),
     current_user: dict = Depends(require_teacher),
 ):
-    """Upload optional reference material (PDF/DOCX/TXT) to be used for RAG."""
+    """Upload optional reference material and index it into the persistent syllabus retriever."""
     await _get_owned_syllabus_or_404(syllabus_id, current_user["id"])
     file_bytes = await file.read()
     filename = file.filename or "reference"
+    file_type = filename.split(".")[-1].lower() if "." in filename else "txt"
 
     try:
         content = extract_text(file_bytes, filename)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    uploaded_at = datetime.now(timezone.utc).isoformat()
-    doc = {
-        "syllabus_id": syllabus_id,
-        "file_name": filename,
-        "file_type": filename.split(".")[-1].lower() if "." in filename else "txt",
-        "content": content,
-        "uploaded_at": uploaded_at,
-    }
-    result = await documents_collection.insert_one(doc)
-    logger.info("Uploaded reference material '%s' for syllabus %s", filename, syllabus_id)
+    stored = await save_reference_document(
+        syllabus_id=syllabus_id,
+        file_name=filename,
+        file_type=file_type,
+        content=content,
+    )
+    document_id = str(stored["_id"])
+    lc_documents = build_langchain_documents(
+        syllabus_id=syllabus_id,
+        file_name=filename,
+        file_type=file_type,
+        content=content,
+        document_id=document_id,
+    )
+    chunk_count = upsert_syllabus_documents(syllabus_id, document_id, lc_documents)
+    await mark_reference_document_indexed(stored["_id"], chunk_count)
+    logger.info("Uploaded and indexed reference material '%s' for syllabus %s", filename, syllabus_id)
 
     return {
-        "id": str(result.inserted_id),
+        "id": document_id,
         "syllabus_id": syllabus_id,
         "file_name": filename,
-        "uploaded_at": uploaded_at,
+        "uploaded_at": stored.get("uploaded_at", ""),
+        "chunk_count": chunk_count,
     }
 
 
@@ -198,6 +209,8 @@ async def list_reference_material(
             "file_name": d.get("file_name", ""),
             "file_type": d.get("file_type", ""),
             "uploaded_at": d.get("uploaded_at", ""),
+            "indexed_at": d.get("indexed_at"),
+            "chunk_count": d.get("chunk_count", 0),
         }
         for d in docs
     ]
