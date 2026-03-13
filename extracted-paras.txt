@@ -1,0 +1,213 @@
+DAYANANDA SAGAR COLLEGE OF ENGINEERING 
+An Autonomous Institute Affiliated to VTU, Belagavi Approved by AICTE; ISO 9001:2015 Certified Accredited by National Assessment Accreditation Council (NAAC) with ‘A’ grade 
+Shavige Malleshwara Hills, Kumaraswamy Layout, Bengaluru-560078 
+DEPARTMENT OF COMPUTER SCIENCE & ENGINEERING 
+Academic Year 
+2025-2026 
+L: T: P: S 
+3:0:0:0
+Course Title 
+Generative AI 
+Course code 
+22SCS743
+Credit Units 
+03 
+Course Type 
+???
+Course Authors 
+Dr. Krishnan R 
+Date Approved 
+28/10/2025
+Exam Hours 
+03 
+CIE Marks 
+50
+Total Hours 
+40 
+SEE Marks 
+50
+
+
+Course objectives: 
+1. Understand the Fundamentals of Generative AI. 
+2. Master the Mathematics and Theory Behind Generative models. 
+3. Develop Practical Skills in Implementing Generative models. 
+4. Use appropriate metrics to evaluate the performance of Generative models. 
+Course Outcomes [CO]: At the end of the course, student will be able to:
+CO1 
+Articulate the fundamental principles and objectives of generative models
+CO2 
+Utilize probability theory and statistical methods to understand and develop generative models
+CO3 
+Implement Generative Models
+CO4 
+Evaluate Generative Model Performance
+
+
+Unit 
+Contents 
+Hours COs
+
+Unit – 1 
+Generative Modeling: What is generative modeling? Our first-generation model, Core probability theory, Generative model taxonomy, The generative deep learning codebase, Timeline of Generative AI, The Current State of Generative AI, The Future of Generative AI 
+Hands-on: Implement a simple generative model using Gaussian distributions / Implement a Multilayer Perceptron (MLP) / Convolutional Neural Network (CNN) from scratch
+6 
+CO1
+
+Unit - 2 
+Image Generation 
+Variational Autoencoders: Introduction, Autoencoders, Variational Autoencoders, Exploring the latent space 
+Generative Adversarial Networks: Introduction, Deep Convolutional GAN (DCGAN), Wasserstein GAN with Gradient Penalty (WGAN-GP), Conditional GAN (CGAN) Advanced GANs: Introduction, ProGAN, StyleGAN, StyleGAN2, Other important GANs 
+Diffusion Models: Introduction, Denoising Diffusion Models (DDM) 
+Hands-on: Implement a denoising diffusion model (DDM) 
+Implement a VAE and visualize the latent space / Implement a DCGAN to generate images / Implement a WGAN-GP and compare its performance with a DCGAN/ Implement a StyleGAN model and generate high-quality images
+10
+CO1 
+& 
+CO2
+
+
+Unit – 3 
+Text Generation 
+Autoregressive Models: Introduction, Long Short-Term Memory, Recurrent Neural Network (RNN) extensions 
+Transformers: Introduction, GPT, Other transformers 
+Frontiers in LLMs: LLM Evolution - Synthetic data, Larger context windows Training speedups, Multi-token generation, Knowledge distillation, Post-attention architectures, LLM Trends - Small language models, Democratization, Domain-specific language models, New Frontiers - LLM Agents, LLM-enhanced search 
+Hands-on: Implement a transformer model for text generation
+8
+CO2 
+& 
+CO3
+Unit – 4 
+Music Generation: Introduction, Transformers for Music Generation, MuseGAN 
+World Models: Reinforcement Learning, World Model Overview, Collecting Random Rollout Data, Training the VAE, Collecting Data to Train the MDN-RNN, Training the MDN-RNN, Training the Controller, In-Dream Training 
+Multimodal Models: Introduction, DALL.E2, Imagen, Stable Diffusion, Flamingo 
+Hands-on: Implement a transformer model for music generation / Implement a world model using VAE, MDN-RNN, and train a controller / Implement a multimodal model like DALL.E2 for image and text generation
+8
+CO3 
+& 
+CO4
+Unit - 5 
+Emerging directions: 
+Code Generation: Evolution from code completion to full code synthesis, Prompt engineering for structured code tasks, Reinforcement Learning from Human Feedback and Evaluation.  
+Multimodal and Neuro-symbolic AI: Multimodal reasoning, Key architectures, Symbolic reasoning inside neural systems (NeSy AI). 
+Hands-on:  
+StarCoder / Code Llama on Hugging Face to generate and test simple algorithms and compare model-generated vs human code.
+8 
+CO4
+
+
+Text Books:
+Sl.# 
+Author & Edition 
+Publisher
+1. 
+"Generative Deep Learning: Teaching Machines to Paint, Write, Compose, and Play" by David Foster 
+O’Reilly
+
+
+Reference Books:
+Sl.# 
+Author & Edition 
+Publisher
+1. 
+"Deep Learning" by Ian Goodfellow, Yoshua Bengio and Aaron Courville 
+MIT Press
+2. 
+"Hands-On Generative Adversarial Networks with Keras: Deep Learning and Computer Vision" by Rafael Valle 
+Packt
+3. 
+“Large Language Models: A Deep Dive (Bridging Theory and Practice)” by Uday Kamath, Kevin Keenan, Garrett Somers, Sarah Sorenson 
+Springer
+
+
+E-Learning (Optional):
+Sl.# 
+Link
+1. 
+https://shorturl.at/Z9SpK
+2. 
+https://www.coursera.org/courses?query=generative%20ai
+3. 
+Code generation: StarCoder blog + model page (what StarCoder is and how to use it) https://huggingface.co/blog/starcoder
+4. 
+Agentic & autonomous AI: DeepLearning.AI short course “AI Agents in LangGraph” (compact, hands-on intro to building agents) https://www.deeplearning.ai/short-courses/ai-agents-in-langgraph/
+5.
+Multimodal & Neuro-symbolic AI: “Learning Transferable Visual Models from Natural Language Supervision” — key idea for vision?language alignment 
+https://openai.com/index/clip/?utm_source=chatgpt.com
+Recent survey / review on Neuro-Symbolic AI (ACM / other surveys)  
+https://dl.acm.org/doi/abs/10.1007/s00521-024-09960-z
+
+
+CO – PO, CO-PSO MAPPING
+COURSE 
+PO1 
+PO2 
+PO3 
+PO4 PO5 
+PO6 
+PO7 
+PO8 
+PO9 
+PO10 
+PO11 
+PO12 
+PSO1 
+PSO2
+CO1 
+3 
+2 
+1 
+1 1 
+- 
+- 
+- 
+- 
+1 
+- 
+1 
+3 
+2
+CO2 
+3 
+3 
+2 
+2 2 
+- 
+- 
+- 
+- 
+1 
+- 
+2 
+2 
+2
+CO3 
+3 
+2 
+3 
+3 3 
+- 
+- 
+- 
+1 
+2 
+2 
+3 
+3 
+3
+CO4 
+3 
+3 
+2 
+3 3 
+- 
+- 
+- 
+1 
+1 
+1 
+3 
+3 
+3
+
+

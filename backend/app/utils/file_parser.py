@@ -20,8 +20,17 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 def extract_text_from_docx(file_bytes: bytes) -> str:
     """Extract text from a DOCX file."""
     doc = Document(io.BytesIO(file_bytes))
-    paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
-    return "\n\n".join(paragraphs)
+    parts: list[str] = []
+
+    parts.extend(p.text.strip() for p in doc.paragraphs if p.text.strip())
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                cell_lines = [line.strip() for line in cell.text.splitlines() if line.strip()]
+                parts.extend(cell_lines)
+
+    return "\n\n".join(parts)
 
 
 def extract_text(file_bytes: bytes, filename: str) -> str:

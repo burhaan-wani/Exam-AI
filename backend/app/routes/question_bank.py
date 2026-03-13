@@ -54,7 +54,7 @@ async def upload_syllabus_new(
     filename = file.filename or "unknown"
 
     try:
-        raw_text, units = await parse_syllabus_units(file_bytes, filename)
+        raw_text, parsed_units = await parse_syllabus_units(file_bytes, filename)
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -63,10 +63,11 @@ async def upload_syllabus_new(
         "user_id": current_user["id"],
         "filename": filename,
         "raw_text": raw_text,
-        "topics": [{"name": unit, "unit": unit, "subtopics": []} for unit in units],
+        "topics": parsed_units,
         "created_at": created_at,
     }
     result = await syllabus_collection.insert_one(doc)
+    units = [unit.get("unit", "") for unit in parsed_units]
     logger.info("Syllabus uploaded: %s (%d units) by %s", filename, len(units), current_user["email"])
 
     return {
