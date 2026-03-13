@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { questionBankAPI } from '@/api/client'
 import Button from '@/components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
-import { Upload, FileText, CheckCircle } from 'lucide-react'
+import { Upload, CheckCircle } from 'lucide-react'
 
 const SyllabusUpload = () => {
   const navigate = useNavigate()
@@ -12,13 +12,17 @@ const SyllabusUpload = () => {
   const [refFiles, setRefFiles] = useState([])
   const [loading, setLoading] = useState(false)
   const [units, setUnits] = useState(null)
+  const [topicsByUnit, setTopicsByUnit] = useState(null)
+  const [syllabusId, setSyllabusId] = useState(null)
   const user = JSON.parse(localStorage.getItem('user') || '{}')
 
   const handleSyllabusChange = (e) => {
     const selectedFile = e.target.files?.[0]
     if (selectedFile) {
       setSyllabusFile(selectedFile)
+      setSyllabusId(null)
       setUnits(null)
+      setTopicsByUnit(null)
     }
   }
 
@@ -35,14 +39,14 @@ const SyllabusUpload = () => {
 
     setLoading(true)
     try {
-      // Step 1: upload syllabus via new two-stage pipeline endpoint
       const response = await questionBankAPI.uploadSyllabus(syllabusFile, user.id)
-      const { id, units: extractedUnits } = response.data
+      const { id, units: extractedUnits, topics } = response.data
 
+      setSyllabusId(id)
       setUnits(extractedUnits)
+      setTopicsByUnit(topics || [])
       toast.success('Syllabus uploaded and units extracted!')
 
-      // Step 2: upload all selected reference materials (if any)
       if (refFiles.length > 0) {
         for (const file of refFiles) {
           // eslint-disable-next-line no-await-in-loop
@@ -51,8 +55,6 @@ const SyllabusUpload = () => {
         toast.success('Reference materials uploaded!')
       }
 
-      // Step 3: navigate to question bank for this syllabus
-      navigate(`/question-bank/${id}`)
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Upload failed')
     } finally {
@@ -75,8 +77,8 @@ const SyllabusUpload = () => {
           <CardDescription>Select a syllabus document to process</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* File Input */}
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-slate-900 transition-colors cursor-pointer"
+          <div
+            className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-slate-900 transition-colors cursor-pointer"
             onClick={() => document.getElementById('syllabus-input').click()}
           >
             <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
@@ -95,7 +97,6 @@ const SyllabusUpload = () => {
             />
           </div>
 
-          {/* Reference Materials */}
           <div className="space-y-2">
             <h3 className="font-semibold text-gray-900">Reference Materials (optional)</h3>
             <p className="text-sm text-gray-600">
@@ -114,7 +115,6 @@ const SyllabusUpload = () => {
             )}
           </div>
 
-          {/* Units Preview */}
           {units && (
             <div className="space-y-2">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -122,16 +122,35 @@ const SyllabusUpload = () => {
                 Extracted Units ({units.length})
               </h3>
               <div className="max-h-96 overflow-y-auto space-y-2 p-4 bg-gray-50 rounded-lg">
-                {units.map((unit, idx) => (
-                  <div key={idx} className="text-sm">
-                    <p className="font-semibold text-gray-900">{unit}</p>
-                  </div>
-                ))}
+                {(topicsByUnit || []).length > 0 ? (
+                  topicsByUnit.map((unit, idx) => (
+                    <div key={idx} className="rounded border border-gray-200 bg-white p-3 text-sm">
+                      <p className="font-semibold text-gray-900">{unit.unit}</p>
+                      {unit.subtopics?.length > 0 && (
+                        <ul className="mt-2 list-disc list-inside space-y-1 text-gray-700">
+                          {unit.subtopics.map((topic, topicIdx) => (
+                            <li key={`${idx}-${topicIdx}`}>{topic}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  units.map((unit, idx) => (
+                    <div key={idx} className="text-sm">
+                      <p className="font-semibold text-gray-900">{unit}</p>
+                    </div>
+                  ))
+                )}
               </div>
+              {topicsByUnit?.length > 0 && (
+                <p className="text-xs text-gray-500">
+                  Temporary preview for extraction validation. We can remove this from the UI once the parser looks stable.
+                </p>
+              )}
             </div>
           )}
 
-          {/* Actions */}
           <div className="flex gap-3">
             <Button
               onClick={handleUpload}
@@ -145,7 +164,9 @@ const SyllabusUpload = () => {
                 variant="outline"
                 onClick={() => {
                   setSyllabusFile(null)
+                  setSyllabusId(null)
                   setUnits(null)
+                  setTopicsByUnit(null)
                   setRefFiles([])
                 }}
               >
@@ -153,17 +174,26 @@ const SyllabusUpload = () => {
               </Button>
             )}
           </div>
+
+          {syllabusId && (
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => navigate(`/question-bank/${syllabusId}`)}
+            >
+              Continue to Question Bank
+            </Button>
+          )}
         </CardContent>
       </Card>
 
-      {/* Info */}
       <Card className="bg-blue-50 border-blue-200">
         <CardContent className="pt-6">
           <h4 className="font-semibold text-blue-900 mb-2">What happens next?</h4>
           <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-            <li>Units are extracted from your syllabus using AI analysis</li>
+            <li>Units and topics are extracted from your syllabus</li>
             <li>Reference materials are indexed for retrieval-augmented generation</li>
-            <li>An AI-generated question bank is created across Bloom levels for each unit</li>
+            <li>A Bloom-aligned question bank is created topic by topic</li>
             <li>You can review the bank and then generate a question paper from it</li>
           </ol>
         </CardContent>

@@ -74,6 +74,7 @@ async def upload_syllabus_new(
         "id": str(result.inserted_id),
         "filename": filename,
         "units": units,
+        "topics": parsed_units,
         "unit_count": len(units),
         "created_at": created_at,
     }
