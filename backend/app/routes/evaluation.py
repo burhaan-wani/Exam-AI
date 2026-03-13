@@ -40,15 +40,19 @@ async def _get_student_evaluation_or_404(eval_id: str) -> dict:
     return doc
 
 
-async def _ensure_teacher_owns_paper(paper_id: str, teacher_id: str) -> None:
+async def _get_paper_or_404(paper_id: str) -> dict:
     try:
-        paper = await final_question_paper_collection.find_one({"_id": ObjectId(paper_id)})
+        doc = await final_question_paper_collection.find_one({"_id": ObjectId(paper_id)})
     except Exception:
         raise HTTPException(400, "Invalid paper ID")
 
-    if not paper:
+    if not doc:
         raise HTTPException(404, "Question paper not found")
+    return doc
 
+
+async def _ensure_teacher_owns_paper(paper_id: str, teacher_id: str) -> None:
+    paper = await _get_paper_or_404(paper_id)
     syllabus_id = paper.get("syllabus_id", "")
     try:
         syllabus = await syllabus_collection.find_one({"_id": ObjectId(syllabus_id), "user_id": teacher_id})
@@ -65,6 +69,8 @@ async def submit_student_answers(
     current_user: dict = Depends(require_student),
 ):
     """Submit student answers for a question paper."""
+    await _get_paper_or_404(body.paper_id)
+
     try:
         doc = {
             "paper_id": body.paper_id,

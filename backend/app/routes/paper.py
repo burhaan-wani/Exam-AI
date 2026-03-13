@@ -2,14 +2,14 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.database import final_question_paper_collection
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import require_student
 
 router = APIRouter()
 
 
 @router.get("/{paper_id}")
-async def get_paper(paper_id: str, _current_user: dict = Depends(get_current_user)):
-    """Get a generated question paper by ID."""
+async def get_paper(paper_id: str, _current_user: dict = Depends(require_student)):
+    """Get a generated question paper for the student submission flow."""
     try:
         doc = await final_question_paper_collection.find_one({"_id": ObjectId(paper_id)})
     except Exception:
