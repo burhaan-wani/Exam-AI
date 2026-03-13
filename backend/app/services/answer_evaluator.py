@@ -43,7 +43,6 @@ async def evaluate_student_submission(answer_id: str) -> dict:
             continue
 
         max_marks = paper_q.get("marks", 0)
-        # Prefer true model answer from paper; fall back to question text if missing
         model_answer = paper_q.get("model_answer") or paper_q.get("question_text", "")
         bloom_level = paper_q.get("bloom_level", "Remember")
 
@@ -85,6 +84,7 @@ async def evaluate_student_submission(answer_id: str) -> dict:
     eval_doc = {
         "answer_id": answer_id,
         "paper_id": submission["paper_id"],
+        "user_id": submission.get("user_id", ""),
         "student_name": submission.get("student_name", ""),
         "question_scores": question_scores,
         "total_marks": total_awarded,
