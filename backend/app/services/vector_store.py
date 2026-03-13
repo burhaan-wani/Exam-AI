@@ -3,6 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import List
 
+from chromadb.config import Settings as ChromaSettings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import Document
 from langchain_community.vectorstores import Chroma
@@ -44,10 +45,16 @@ def _document_chunk_ids(syllabus_id: str, document_id: str, count: int) -> list[
 
 
 def _get_vector_store(syllabus_id: str) -> Chroma:
+    persist_directory = str(_persist_directory(syllabus_id))
     return Chroma(
         collection_name=_collection_name(syllabus_id),
         embedding_function=get_embeddings(),
-        persist_directory=str(_persist_directory(syllabus_id)),
+        persist_directory=persist_directory,
+        client_settings=ChromaSettings(
+            is_persistent=True,
+            persist_directory=persist_directory,
+            anonymized_telemetry=False,
+        ),
     )
 
 
