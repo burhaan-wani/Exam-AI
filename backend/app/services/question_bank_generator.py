@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import get_settings
 from app.database import question_bank_collection, syllabus_collection
-from app.models.schemas import BloomLevel, QuestionBankItem
+from app.models.schemas import BloomLevel, QuestionBankItem, QuestionReviewStatus
 from app.services.rag_retriever import build_retriever_for_syllabus
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,103 @@ def _get_chat_model() -> ChatOpenAI:
     os.environ["OPENAI_API_KEY"] = settings.openrouter_api_key
     os.environ["OPENAI_BASE_URL"] = "https://openrouter.ai/api/v1"
     return ChatOpenAI(model=settings.openrouter_model, temperature=0.3)
+
+
+def _format_question_bank_item(doc: dict) -> QuestionBankItem:
+    return QuestionBankItem(
+        id=str(doc["_id"]),
+        question=doc.get("question", ""),
+        unit=doc.get("unit", ""),
+        topic=doc.get("topic", ""),
+        bloom_level=doc.get("bloom_level", "Remember"),
+        marks=doc.get("marks", 0),
+        difficulty=doc.get("difficulty", "Level 1"),
+        status=doc.get("status", QuestionReviewStatus.PENDING.value),
+        source_context=doc.get("source_context"),
+        created_at=doc.get("created_at", ""),
+    )
+
+
+async def _build_context_text(syllabus_id: str, query_text: str) -> str:
+    retriever = await build_retriever_for_syllabus(syllabus_id)
+    if not retriever:
+        return ""
+    docs = await retriever.ainvoke(query_text)
+    return "\n\n".join(doc.page_content for doc in docs)
+
+
+async def generate_single_question(
+    syllabus_id: str,
+    unit_name: str,
+    topic_name: str,
+    bloom_level: int,
+    previous_question: str | None = None,
+) -> dict:
+    bloom_config = _BLOOM_CONFIG.get(bloom_level, _BLOOM_CONFIG[1])
+    bloom = bloom_config["category"]
+    context_text = await _build_context_text(syllabus_id, f"{unit_name} {topic_name}")
+    llm = _get_chat_model()
+
+    previous_clause = ""
+    if previous_question:
+        previous_clause = f"\nAvoid repeating this previous question: {previous_question}"
+
+    messages = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "You are an expert exam question designer. Return ONLY valid JSON.",
+            ),
+            (
+                "human",
+                """Course unit: {unit_name}
+Source topic: {topic_name}
+Bloom level: {bloom_level}
+Bloom category: {bloom_category}
+Generate exactly one fresh question for this topic and Bloom level.
+Keep the source topic exact and do not use course objectives or outcomes.{previous_clause}
+
+Return ONLY valid JSON in this format:
+{{
+  "question": "Question text here",
+  "topic": "{topic_name}",
+  "bloom_level": {bloom_level},
+  "bloom_category": "{bloom_category}"
+}}
+
+Context (may be empty):
+{context}
+""",
+            ),
+        ]
+    ).format_messages(
+        unit_name=unit_name,
+        topic_name=topic_name,
+        bloom_level=bloom_level,
+        bloom_category=bloom.value,
+        previous_clause=previous_clause,
+        context=context_text,
+    )
+
+    def _run() -> str:
+        resp = llm.invoke(messages)
+        return resp.content or ""
+
+    raw = await asyncio.to_thread(_run)
+    content = raw.strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[1]
+        content = content.rsplit("```", 1)[0]
+
+    data = json.loads(content)
+    return {
+        "question": data.get("question", ""),
+        "topic": data.get("topic") or topic_name,
+        "bloom_level": bloom.value,
+        "difficulty": bloom_config["difficulty"],
+        "source_context": context_text[:1000] if context_text else None,
+        "status": QuestionReviewStatus.PENDING.value,
+    }
 
 
 QUESTION_BANK_TEMPLATE = ChatPromptTemplate.from_messages(
@@ -97,15 +194,11 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
         raise ValueError("Could not derive any topics from the syllabus units")
 
     llm = _get_chat_model()
-    retriever = await build_retriever_for_syllabus(syllabus_id)
     question_items: List[QuestionBankItem] = []
     await question_bank_collection.delete_many({"syllabus_id": syllabus_id})
 
     for unit_name, topic_names in unit_topics:
-        context_text = ""
-        if retriever:
-            docs = await retriever.ainvoke(f"{unit_name} {' '.join(topic_names)}")
-            context_text = "\n\n".join(doc.page_content for doc in docs)
+        context_text = await _build_context_text(syllabus_id, f"{unit_name} {' '.join(topic_names)}")
 
         messages = QUESTION_BANK_TEMPLATE.format_messages(
             unit_name=unit_name,
@@ -146,23 +239,13 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
                 "bloom_level": bloom.value,
                 "marks": 0,
                 "difficulty": bloom_config["difficulty"],
+                "status": QuestionReviewStatus.PENDING.value,
                 "source_context": context_text[:1000] if context_text else None,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
             result = await question_bank_collection.insert_one(doc)
-            question_items.append(
-                QuestionBankItem(
-                    id=str(result.inserted_id),
-                    question=doc["question"],
-                    unit=doc["unit"],
-                    topic=doc["topic"],
-                    bloom_level=bloom,
-                    marks=doc["marks"],
-                    difficulty=doc["difficulty"],
-                    source_context=doc["source_context"],
-                    created_at=doc["created_at"],
-                )
-            )
+            doc["_id"] = result.inserted_id
+            question_items.append(_format_question_bank_item(doc))
 
         logger.info("Generated %d questions for unit '%s'", len(questions), unit_name)
 

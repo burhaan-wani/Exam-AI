@@ -16,6 +16,13 @@ class UserRole(str, Enum):
     STUDENT = "student"
 
 
+class QuestionReviewStatus(str, Enum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EDITED = "edited"
+
+
 class UserCreate(BaseModel):
     name: str
     email: str
@@ -145,10 +152,16 @@ class QuestionBankItem(BaseModel):
     unit: str
     topic: str = ""
     bloom_level: BloomLevel
-    marks: int = 5
+    marks: int = 0
     difficulty: str = "medium"
+    status: QuestionReviewStatus = QuestionReviewStatus.PENDING
     source_context: str | None = None
     created_at: str = ""
+
+
+class QuestionBankUpdateRequest(BaseModel):
+    question: str | None = None
+    status: QuestionReviewStatus | None = None
 
 
 class QuestionBankCreateRequest(BaseModel):

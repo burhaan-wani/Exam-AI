@@ -72,6 +72,12 @@ export const questionBankAPI = {
       params: { syllabus_id: syllabusId, ...params },
     }),
 
+  updateQuestion: (questionId, data) =>
+    apiClient.patch(`/question-bank/${questionId}`, data),
+
+  regenerateQuestion: (questionId) =>
+    apiClient.post(`/question-bank/${questionId}/regenerate`),
+
   generateQuestionPaper: (template) =>
     apiClient.post('/generate-question-paper', template),
 

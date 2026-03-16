@@ -26,4 +26,5 @@ async def init_indexes():
     await evaluation_results_collection.create_index("paper_id")
     await evaluation_results_collection.create_index("user_id")
     await question_bank_collection.create_index([("syllabus_id", 1), ("unit", 1), ("bloom_level", 1)])
+    await question_bank_collection.create_index([("syllabus_id", 1), ("status", 1)])
     await documents_collection.create_index("syllabus_id")

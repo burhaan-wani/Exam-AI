@@ -10,7 +10,7 @@ from langchain_openai import ChatOpenAI
 
 from app.config import get_settings
 from app.database import question_bank_collection, final_question_paper_collection
-from app.models.schemas import QuestionPaperTemplate, PaperQuestion
+from app.models.schemas import QuestionPaperTemplate, PaperQuestion, QuestionReviewStatus
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -19,6 +19,7 @@ _DEFAULT_MARKS_BY_BLOOM = {
     "Apply": 5,
     "Analyze": 10,
 }
+_CURATED_STATUSES = {QuestionReviewStatus.APPROVED.value, QuestionReviewStatus.EDITED.value}
 
 
 def _get_chat_model() -> ChatOpenAI:
@@ -73,10 +74,12 @@ Try to balance unit coverage and avoid repeating the same question.
 
 async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> dict:
     """Select bank questions with an LLM and persist a final paper."""
-    cursor = question_bank_collection.find({"syllabus_id": template.syllabus_id})
+    cursor = question_bank_collection.find(
+        {"syllabus_id": template.syllabus_id, "status": {"$in": list(_CURATED_STATUSES)}}
+    )
     bank_docs = await cursor.to_list(length=1000)
     if not bank_docs:
-        raise ValueError("Question bank is empty for this syllabus. Generate it first.")
+        raise ValueError("No approved question bank entries found. Review and approve questions first.")
 
     bank_payload = [
         {

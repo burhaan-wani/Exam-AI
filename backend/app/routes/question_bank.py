@@ -6,16 +6,27 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
 from app.database import syllabus_collection, question_bank_collection, documents_collection, final_question_paper_collection
 from app.dependencies.auth import require_teacher
-from app.models.schemas import QuestionBankItem, QuestionBankCreateRequest, QuestionPaperTemplate
+from app.models.schemas import (
+    QuestionBankItem,
+    QuestionBankCreateRequest,
+    QuestionBankUpdateRequest,
+    QuestionPaperTemplate,
+    QuestionReviewStatus,
+)
 from app.services.document_loader import build_langchain_documents, mark_reference_document_indexed, save_reference_document
 from app.services.paper_generator import generate_paper_from_question_bank
-from app.services.question_bank_generator import generate_question_bank_for_syllabus
+from app.services.question_bank_generator import (
+    _format_question_bank_item,
+    generate_question_bank_for_syllabus,
+    generate_single_question,
+)
 from app.services.syllabus_parser import parse_syllabus_units
 from app.services.vector_store import upsert_syllabus_documents
 from app.utils.file_parser import extract_text
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+_CURATED_STATUSES = {QuestionReviewStatus.APPROVED.value, QuestionReviewStatus.EDITED.value}
 
 
 def _fallback_marks_for_bloom(bloom_level: str) -> int:
@@ -50,6 +61,19 @@ async def _get_teacher_paper_or_404(paper_id: str, teacher_id: str) -> dict:
     syllabus_id = paper.get("syllabus_id", "")
     await _get_owned_syllabus_or_404(syllabus_id, teacher_id)
     return paper
+
+
+async def _get_teacher_question_or_404(question_id: str, teacher_id: str) -> dict:
+    try:
+        doc = await question_bank_collection.find_one({"_id": ObjectId(question_id)})
+    except Exception:
+        raise HTTPException(400, "Invalid question ID")
+
+    if not doc:
+        raise HTTPException(404, "Question not found")
+
+    await _get_owned_syllabus_or_404(doc.get("syllabus_id", ""), teacher_id)
+    return doc
 
 
 @router.post("/upload-syllabus")
@@ -107,6 +131,7 @@ async def list_question_bank(
     syllabus_id: str,
     unit: str | None = None,
     bloom_level: str | None = None,
+    status: str | None = None,
     current_user: dict = Depends(require_teacher),
 ):
     """List question bank entries for a teacher-owned syllabus."""
@@ -117,23 +142,73 @@ async def list_question_bank(
         query["unit"] = unit
     if bloom_level:
         query["bloom_level"] = bloom_level
+    if status:
+        query["status"] = status
 
     cursor = question_bank_collection.find(query)
     docs = await cursor.to_list(length=500)
-    return [
-        QuestionBankItem(
-            id=str(d["_id"]),
-            question=d.get("question", ""),
-            unit=d.get("unit", ""),
-            topic=d.get("topic", ""),
-            bloom_level=d.get("bloom_level", "Remember"),
-            marks=d.get("marks", 5),
-            difficulty=d.get("difficulty", "medium"),
-            source_context=d.get("source_context"),
-            created_at=d.get("created_at", ""),
+    return [_format_question_bank_item(d) for d in docs]
+
+
+@router.patch("/question-bank/{question_id}", response_model=QuestionBankItem)
+async def update_question_bank_item(
+    question_id: str,
+    body: QuestionBankUpdateRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    """Approve, reject, or edit a generated bank question."""
+    doc = await _get_teacher_question_or_404(question_id, current_user["id"])
+
+    updates: dict = {}
+    if body.question is not None:
+        cleaned = body.question.strip()
+        if not cleaned:
+            raise HTTPException(400, "Question text cannot be empty")
+        updates["question"] = cleaned
+        updates["status"] = QuestionReviewStatus.EDITED.value
+
+    if body.status is not None:
+        updates["status"] = body.status.value
+
+    if not updates:
+        return _format_question_bank_item(doc)
+
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await question_bank_collection.update_one({"_id": doc["_id"]}, {"$set": updates})
+    doc.update(updates)
+    return _format_question_bank_item(doc)
+
+
+@router.post("/question-bank/{question_id}/regenerate", response_model=QuestionBankItem)
+async def regenerate_question_bank_item(
+    question_id: str,
+    current_user: dict = Depends(require_teacher),
+):
+    """Regenerate a single bank question for the same unit, topic, and Bloom level."""
+    doc = await _get_teacher_question_or_404(question_id, current_user["id"])
+    bloom_level = doc.get("bloom_level", "Remember")
+    bloom_level_int = {
+        "Remember": 1,
+        "Apply": 2,
+        "Analyze": 3,
+    }.get(bloom_level, 1)
+
+    try:
+        regenerated = await generate_single_question(
+            syllabus_id=doc.get("syllabus_id", ""),
+            unit_name=doc.get("unit", ""),
+            topic_name=doc.get("topic", ""),
+            bloom_level=bloom_level_int,
+            previous_question=doc.get("question", ""),
         )
-        for d in docs
-    ]
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    regenerated["updated_at"] = datetime.now(timezone.utc).isoformat()
+    regenerated["marks"] = 0
+    await question_bank_collection.update_one({"_id": doc["_id"]}, {"$set": regenerated})
+    doc.update(regenerated)
+    return _format_question_bank_item(doc)
 
 
 @router.post("/generate-question-paper")
@@ -249,7 +324,10 @@ async def review_question_in_paper(
         query["unit"] = unit
 
     cursor = question_bank_collection.find(query)
-    candidates = [d async for d in cursor if str(d["_id"]) not in used_bank_ids]
+    candidates = [
+        d async for d in cursor
+        if str(d["_id"]) not in used_bank_ids and d.get("status", QuestionReviewStatus.PENDING.value) in _CURATED_STATUSES
+    ]
     if not candidates:
         raise HTTPException(400, "No alternative questions available in question bank")
 
