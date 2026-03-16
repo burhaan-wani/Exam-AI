@@ -34,6 +34,18 @@ _TERMINAL_SECTION_PREFIXES = (
     "course po",
     "course outcomes",
 )
+_TERMINAL_SECTION_KEYWORDS = (
+    "text books",
+    "reference books",
+    "author & edition",
+    "publisher",
+    "co-po",
+    "co po",
+    "co-pso",
+    "mapping",
+    "e-learning",
+    "f-learning",
+)
 
 
 def _normalize_line(line: str) -> str:
@@ -68,7 +80,15 @@ def _should_skip_line(line: str) -> bool:
 
 def _is_terminal_section_heading(line: str) -> bool:
     normalized = _normalize_line(line).lower()
-    return normalized.startswith(_TERMINAL_SECTION_PREFIXES)
+    if normalized.startswith(_TERMINAL_SECTION_PREFIXES):
+        return True
+    if any(keyword in normalized for keyword in _TERMINAL_SECTION_KEYWORDS):
+        return True
+    if normalized in {"sl#", "course"}:
+        return True
+    if re.match(r"^(po|pso)\d+\b", normalized):
+        return True
+    return False
 
 
 def _dedupe_keep_order(items: list[str]) -> list[str]:
@@ -136,10 +156,14 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
     parsed_units: list[dict[str, Any]] = []
     current_unit_number: str | None = None
     current_unit_lines: list[str] = []
+    skipping_hands_on = False
 
     for line in lines:
         if not line:
             continue
+
+        normalized_line = _normalize_line(line)
+        lowered_line = normalized_line.lower()
 
         if current_unit_number and _is_terminal_section_heading(line):
             if current_unit_lines:
@@ -154,10 +178,23 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
                 parsed_units.append(_build_unit_record(current_unit_number, current_unit_lines))
             current_unit_number = unit_match.group(1)
             current_unit_lines = []
+            skipping_hands_on = False
             continue
 
+        if current_unit_number and lowered_line.startswith("hands-on"):
+            skipping_hands_on = True
+            continue
+
+        if skipping_hands_on:
+            if _is_terminal_section_heading(line) or _is_unit_heading(line):
+                skipping_hands_on = False
+            elif re.fullmatch(r"[\d\s.]+", normalized_line) or lowered_line in {"&", "cos"} or lowered_line.startswith("co"):
+                continue
+            else:
+                continue
+
         if current_unit_number:
-            current_unit_lines.append(line)
+            current_unit_lines.append(normalized_line)
 
     if current_unit_number and current_unit_lines:
         parsed_units.append(_build_unit_record(current_unit_number, current_unit_lines))
