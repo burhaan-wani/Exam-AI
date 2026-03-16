@@ -21,6 +21,19 @@ _IGNORED_LINE_PREFIXES = (
     "reference books",
     "references",
 )
+_TERMINAL_SECTION_PREFIXES = (
+    "text book",
+    "text books",
+    "reference book",
+    "reference books",
+    "e-learning",
+    "f-learning",
+    "co-po",
+    "co po",
+    "co-pso",
+    "course po",
+    "course outcomes",
+)
 
 
 def _normalize_line(line: str) -> str:
@@ -51,6 +64,11 @@ def _should_skip_line(line: str) -> bool:
     if re.fullmatch(r"[\d\s.]+", normalized):
         return True
     return False
+
+
+def _is_terminal_section_heading(line: str) -> bool:
+    normalized = _normalize_line(line).lower()
+    return normalized.startswith(_TERMINAL_SECTION_PREFIXES)
 
 
 def _dedupe_keep_order(items: list[str]) -> list[str]:
@@ -122,6 +140,13 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
     for line in lines:
         if not line:
             continue
+
+        if current_unit_number and _is_terminal_section_heading(line):
+            if current_unit_lines:
+                parsed_units.append(_build_unit_record(current_unit_number, current_unit_lines))
+            current_unit_number = None
+            current_unit_lines = []
+            break
 
         unit_match = _is_unit_heading(line)
         if unit_match:
