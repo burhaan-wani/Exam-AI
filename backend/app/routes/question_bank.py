@@ -4,17 +4,26 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 
-from app.database import syllabus_collection, question_bank_collection, documents_collection, final_question_paper_collection
+from app.database import (
+    syllabus_collection,
+    question_bank_collection,
+    documents_collection,
+    final_question_paper_collection,
+    paper_templates_collection,
+)
 from app.dependencies.auth import require_teacher
 from app.models.schemas import (
     QuestionBankItem,
     QuestionBankCreateRequest,
     QuestionBankUpdateRequest,
+    PaperTemplateOut,
     QuestionPaperTemplate,
     QuestionReviewStatus,
+    TemplatePaperGenerationRequest,
 )
 from app.services.document_loader import build_langchain_documents, mark_reference_document_indexed, save_reference_document
-from app.services.paper_generator import generate_paper_from_question_bank
+from app.services.paper_generator import generate_paper_from_question_bank, generate_paper_from_uploaded_template
+from app.services.paper_template_parser import parse_paper_template_blueprint
 from app.services.question_bank_generator import (
     _format_question_bank_item,
     generate_question_bank_for_syllabus,
@@ -22,7 +31,7 @@ from app.services.question_bank_generator import (
 )
 from app.services.syllabus_parser import parse_syllabus_units
 from app.services.vector_store import upsert_syllabus_documents
-from app.utils.file_parser import extract_text
+from app.utils.file_parser import extract_text, extract_template_source
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -73,6 +82,13 @@ async def _get_teacher_question_or_404(question_id: str, teacher_id: str) -> dic
         raise HTTPException(404, "Question not found")
 
     await _get_owned_syllabus_or_404(doc.get("syllabus_id", ""), teacher_id)
+    return doc
+
+
+async def _get_latest_template_or_404(syllabus_id: str) -> dict:
+    doc = await paper_templates_collection.find_one({"syllabus_id": syllabus_id}, sort=[("uploaded_at", -1)])
+    if not doc:
+        raise HTTPException(404, "Paper template not found")
     return doc
 
 
@@ -220,6 +236,84 @@ async def generate_question_paper(
     await _get_owned_syllabus_or_404(template.syllabus_id, current_user["id"])
     try:
         paper_doc = await generate_paper_from_question_bank(template)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {
+        "id": str(paper_doc["_id"]),
+        "syllabus_id": paper_doc.get("syllabus_id", ""),
+        "exam_title": paper_doc.get("exam_title", ""),
+        "total_marks": paper_doc.get("total_marks", 0),
+        "duration_minutes": paper_doc.get("duration_minutes", 180),
+        "questions": paper_doc.get("questions", []),
+        "created_at": paper_doc.get("created_at", ""),
+    }
+
+
+@router.post("/upload-paper-template", response_model=PaperTemplateOut)
+async def upload_paper_template(
+    syllabus_id: str = Form(...),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_teacher),
+):
+    """Upload a previous paper template and extract its structural blueprint."""
+    syllabus = await _get_owned_syllabus_or_404(syllabus_id, current_user["id"])
+    file_bytes = await file.read()
+    filename = file.filename or "paper-template"
+
+    try:
+        raw_text, page_images = extract_template_source(file_bytes, filename)
+        unit_names = [topic.get("unit", "") for topic in syllabus.get("topics", []) if topic.get("unit")]
+        blueprint = await parse_paper_template_blueprint(raw_text, unit_names, page_images=page_images)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    uploaded_at = datetime.now(timezone.utc).isoformat()
+    await paper_templates_collection.delete_many({"syllabus_id": syllabus_id})
+    doc = {
+        "syllabus_id": syllabus_id,
+        "file_name": filename,
+        "raw_text": raw_text,
+        "blueprint": blueprint.model_dump(),
+        "uploaded_at": uploaded_at,
+    }
+    result = await paper_templates_collection.insert_one(doc)
+
+    return PaperTemplateOut(
+        id=str(result.inserted_id),
+        syllabus_id=syllabus_id,
+        file_name=filename,
+        uploaded_at=uploaded_at,
+        blueprint=blueprint,
+    )
+
+
+@router.get("/paper-template", response_model=PaperTemplateOut)
+async def get_paper_template(
+    syllabus_id: str,
+    current_user: dict = Depends(require_teacher),
+):
+    """Get the latest uploaded paper template for a syllabus."""
+    await _get_owned_syllabus_or_404(syllabus_id, current_user["id"])
+    doc = await _get_latest_template_or_404(syllabus_id)
+    return PaperTemplateOut(
+        id=str(doc["_id"]),
+        syllabus_id=doc.get("syllabus_id", ""),
+        file_name=doc.get("file_name", ""),
+        uploaded_at=doc.get("uploaded_at", ""),
+        blueprint=doc.get("blueprint", {}),
+    )
+
+
+@router.post("/generate-question-paper-from-template")
+async def generate_question_paper_from_template(
+    body: TemplatePaperGenerationRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    """Generate a paper from curated bank questions using the uploaded paper template blueprint."""
+    await _get_owned_syllabus_or_404(body.syllabus_id, current_user["id"])
+    try:
+        paper_doc = await generate_paper_from_uploaded_template(body.syllabus_id)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

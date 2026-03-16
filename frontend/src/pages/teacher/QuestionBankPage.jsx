@@ -25,6 +25,9 @@ const QuestionBankPage = () => {
   const [uploadingRef, setUploadingRef] = useState(false)
   const [refFile, setRefFile] = useState(null)
   const [refDocs, setRefDocs] = useState([])
+  const [templateFile, setTemplateFile] = useState(null)
+  const [templateDoc, setTemplateDoc] = useState(null)
+  const [uploadingTemplate, setUploadingTemplate] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [unitFilter, setUnitFilter] = useState('all')
   const [bloomFilter, setBloomFilter] = useState('all')
@@ -37,6 +40,7 @@ const QuestionBankPage = () => {
     loadSyllabus()
     loadBank()
     loadReferenceMaterial()
+    loadPaperTemplate()
   }, [syllabusId])
 
   const loadSyllabus = async () => {
@@ -66,6 +70,15 @@ const QuestionBankPage = () => {
       setRefDocs(response.data || [])
     } catch {
       setRefDocs([])
+    }
+  }
+
+  const loadPaperTemplate = async () => {
+    try {
+      const response = await questionBankAPI.getPaperTemplate(syllabusId)
+      setTemplateDoc(response.data)
+    } catch {
+      setTemplateDoc(null)
     }
   }
 
@@ -108,22 +121,36 @@ const QuestionBankPage = () => {
       toast.error('Approve or edit some bank questions before generating a paper')
       return
     }
+    if (!templateDoc) {
+      toast.error('Upload a previous paper template before generating the final paper')
+      return
+    }
 
     try {
-      const template = {
-        syllabus_id: syllabusId,
-        title: syllabus?.filename || 'Examination',
-        sections: [
-          { name: 'Section A', bloom_level: 'Remember', num_questions: 3 },
-          { name: 'Section B', bloom_level: 'Apply', num_questions: 2 },
-          { name: 'Section C', bloom_level: 'Analyze', num_questions: 1 },
-        ],
-      }
-      const response = await questionBankAPI.generateQuestionPaper(template)
-      toast.success('Question paper generated from curated question bank!')
+      const response = await questionBankAPI.generateQuestionPaperFromTemplate(syllabusId)
+      toast.success('Question paper generated from curated bank and uploaded template!')
       navigate(`/question-paper/${response.data.id}`)
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to generate question paper')
+    }
+  }
+
+  const handleUploadTemplate = async () => {
+    if (!templateFile) {
+      toast.error('Please select a previous paper template')
+      return
+    }
+
+    setUploadingTemplate(true)
+    try {
+      const response = await questionBankAPI.uploadPaperTemplate(syllabusId, templateFile)
+      setTemplateDoc(response.data)
+      setTemplateFile(null)
+      toast.success('Paper template uploaded and blueprint extracted!')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to upload paper template')
+    } finally {
+      setUploadingTemplate(false)
     }
   }
 
@@ -265,6 +292,45 @@ const QuestionBankPage = () => {
               <Button variant="outline" onClick={handleGeneratePaper}>
                 Generate Question Paper from Curated Bank
               </Button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Paper Template</CardTitle>
+          <CardDescription>
+            Upload a previous semester paper. The final generated paper will follow this extracted blueprint.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            type="file"
+            accept=".pdf,.docx,.doc,.txt"
+            onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+          />
+          <Button onClick={handleUploadTemplate} disabled={uploadingTemplate || !templateFile}>
+            {uploadingTemplate ? 'Uploading template...' : 'Upload Paper Template'}
+          </Button>
+
+          {templateDoc && (
+            <div className="rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
+              <p className="font-semibold text-gray-900">{templateDoc.file_name}</p>
+              <p>
+                Title: {templateDoc.blueprint?.title || 'Examination'} | Questions:{' '}
+                {templateDoc.blueprint?.question_groups?.length || 0} | Total marks:{' '}
+                {templateDoc.blueprint?.total_marks || 0}
+              </p>
+              <div className="space-y-1">
+                {(templateDoc.blueprint?.question_groups || []).slice(0, 6).map((group) => (
+                  <p key={group.question_number}>
+                    Q{group.question_number} | {group.unit_hint || 'Unit unspecified'} | {group.marks} marks
+                    {group.alternative ? ' | OR pattern' : ''}
+                    {group.primary?.subparts?.length > 1 ? ` | ${group.primary.subparts.length} sub-parts` : ''}
+                  </p>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>

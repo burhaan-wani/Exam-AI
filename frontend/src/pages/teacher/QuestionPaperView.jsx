@@ -164,7 +164,7 @@ const QuestionPaperView = () => {
                 </div>
               </div>
 
-              <p className="text-gray-800 mb-3 leading-relaxed">{question.question_text}</p>
+              <p className="text-gray-800 mb-3 leading-relaxed whitespace-pre-line">{question.question_text}</p>
 
               {question.sub_questions && question.sub_questions.length > 0 && (
                 <div className="ml-6 space-y-2 mb-4">

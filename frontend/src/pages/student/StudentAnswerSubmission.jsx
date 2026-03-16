@@ -155,7 +155,7 @@ const StudentAnswerSubmission = () => {
             <CardContent className="space-y-4">
               {/* Question Text */}
               <div>
-                <p className="text-gray-900 font-medium mb-2">{question.question_text}</p>
+                <p className="text-gray-900 font-medium mb-2 whitespace-pre-line">{question.question_text}</p>
 
                 {/* Sub-questions */}
                 {question.sub_questions && question.sub_questions.length > 0 && (

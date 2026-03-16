@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import List
 
@@ -9,8 +10,8 @@ from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.config import get_settings
-from app.database import question_bank_collection, final_question_paper_collection
-from app.models.schemas import QuestionPaperTemplate, PaperQuestion, QuestionReviewStatus
+from app.database import question_bank_collection, final_question_paper_collection, paper_templates_collection
+from app.models.schemas import PaperQuestion, QuestionPaperTemplate, QuestionReviewStatus
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -33,6 +34,134 @@ def _resolve_question_marks(doc: dict) -> int:
     if stored_marks > 0:
         return stored_marks
     return _DEFAULT_MARKS_BY_BLOOM.get(doc.get("bloom_level", ""), 5)
+
+
+def _extract_unit_key(unit_label: str) -> str:
+    match = re.search(r"(unit|module|chapter|part)\s+(\d+)", (unit_label or "").lower())
+    if not match:
+        return (unit_label or "").strip().lower()
+    return f"{match.group(1)} {match.group(2)}"
+
+
+def _select_bank_docs(bank_docs: list[dict], used_ids: set[str], unit_hint: str, count: int) -> list[dict]:
+    unit_key = _extract_unit_key(unit_hint)
+    candidates = [
+        doc for doc in bank_docs
+        if str(doc["_id"]) not in used_ids and (not unit_key or _extract_unit_key(doc.get("unit", "")) == unit_key)
+    ]
+    if len(candidates) < count:
+        raise ValueError(f"Not enough curated questions available for {unit_hint or 'the requested template slot'}.")
+    return candidates[:count]
+
+
+def _format_slot_option(selected_docs: list[dict], subparts: list[dict]) -> str:
+    if not subparts:
+        return selected_docs[0].get("question", "")
+
+    lines: list[str] = []
+    for index, subpart in enumerate(subparts):
+        doc = selected_docs[min(index, len(selected_docs) - 1)]
+        label = (subpart.get("label") or "").strip()
+        marks = int(subpart.get("marks", 0) or 0)
+        prefix = f"{label}) " if label else ""
+        line = f"{prefix}{doc.get('question', '')}"
+        if marks > 0:
+            line = f"{line} ({marks} marks)"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _derive_slot_bloom_level(selected_docs: list[dict]) -> str:
+    levels = {doc.get("bloom_level", "") for doc in selected_docs if doc.get("bloom_level")}
+    if len(levels) == 1:
+        return levels.pop()
+    return "Mixed"
+
+
+async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
+    template_doc = await paper_templates_collection.find_one(
+        {"syllabus_id": syllabus_id},
+        sort=[("uploaded_at", -1)],
+    )
+    if not template_doc:
+        raise ValueError("Upload a paper template before generating the final paper.")
+
+    cursor = question_bank_collection.find(
+        {"syllabus_id": syllabus_id, "status": {"$in": list(_CURATED_STATUSES)}}
+    )
+    bank_docs = await cursor.to_list(length=1000)
+    if not bank_docs:
+        raise ValueError("No approved question bank entries found. Review and approve questions first.")
+
+    blueprint = template_doc.get("blueprint", {})
+    question_groups = blueprint.get("question_groups", [])
+    if not question_groups:
+        raise ValueError("The uploaded paper template does not contain any usable question groups.")
+
+    used_ids: set[str] = set()
+    questions: List[PaperQuestion] = []
+    total_marks = int(blueprint.get("total_marks", 0) or 0)
+    duration_minutes = int(blueprint.get("duration_minutes", 180) or 180)
+
+    for group in question_groups:
+        primary = group.get("primary", {}) or {}
+        alternative = group.get("alternative")
+        subparts = primary.get("subparts", []) or [{"label": "", "marks": int(group.get("marks", 20) or 20)}]
+        primary_docs = _select_bank_docs(bank_docs, used_ids, group.get("unit_hint", ""), len(subparts))
+        for doc in primary_docs:
+            used_ids.add(str(doc["_id"]))
+
+        question_text = _format_slot_option(primary_docs, subparts)
+        all_docs = list(primary_docs)
+
+        if alternative:
+            alternative_subparts = alternative.get("subparts", []) or [{"label": "", "marks": int(group.get("marks", 20) or 20)}]
+            alternative_docs = _select_bank_docs(
+                bank_docs,
+                used_ids,
+                group.get("unit_hint", ""),
+                len(alternative_subparts),
+            )
+            for doc in alternative_docs:
+                used_ids.add(str(doc["_id"]))
+            question_text = f"{question_text}\n\n(OR)\n\n{_format_slot_option(alternative_docs, alternative_subparts)}"
+            all_docs.extend(alternative_docs)
+
+        question_number = int(group.get("question_number", len(questions) + 1))
+        unit_hint = group.get("unit_hint", "") or primary_docs[0].get("unit", "")
+        topics = ", ".join(dict.fromkeys(doc.get("topic", "") for doc in all_docs if doc.get("topic")))
+
+        questions.append(
+            PaperQuestion(
+                question_number=question_number,
+                question_text=question_text,
+                sub_questions=[],
+                marks=int(group.get("marks", 20) or 20),
+                bloom_level=_derive_slot_bloom_level(all_docs),
+                topic=topics,
+                model_answer="",
+                unit=unit_hint,
+                bank_id=str(primary_docs[0]["_id"]),
+            )
+        )
+
+    if total_marks <= 0:
+        total_marks = sum(question.marks for question in questions)
+
+    paper_doc = {
+        "syllabus_id": syllabus_id,
+        "exam_title": blueprint.get("title") or template_doc.get("file_name", "Examination"),
+        "total_marks": total_marks,
+        "duration_minutes": duration_minutes,
+        "questions": [q.model_dump() for q in questions],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "template_id": str(template_doc["_id"]),
+    }
+
+    result = await final_question_paper_collection.insert_one(paper_doc)
+    paper_doc["_id"] = result.inserted_id
+    logger.info("Generated template-guided paper with %d questions", len(questions))
+    return paper_doc
 
 
 PAPER_SELECTION_TEMPLATE = ChatPromptTemplate.from_messages(

@@ -13,6 +13,7 @@ student_answers_collection = db["student_answers"]
 evaluation_results_collection = db["evaluation_results"]
 question_bank_collection = db["question_bank"]
 documents_collection = db["documents"]
+paper_templates_collection = db["paper_templates"]
 
 
 async def init_indexes():
@@ -28,3 +29,4 @@ async def init_indexes():
     await question_bank_collection.create_index([("syllabus_id", 1), ("unit", 1), ("bloom_level", 1)])
     await question_bank_collection.create_index([("syllabus_id", 1), ("status", 1)])
     await documents_collection.create_index("syllabus_id")
+    await paper_templates_collection.create_index("syllabus_id")

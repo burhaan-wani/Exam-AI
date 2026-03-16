@@ -64,6 +64,18 @@ export const questionBankAPI = {
   listReferenceMaterial: (syllabusId) =>
     apiClient.get('/reference-material', { params: { syllabus_id: syllabusId } }),
 
+  uploadPaperTemplate: (syllabusId, file) => {
+    const formData = new FormData()
+    formData.append('syllabus_id', syllabusId)
+    formData.append('file', file)
+    return apiClient.post('/upload-paper-template', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  getPaperTemplate: (syllabusId) =>
+    apiClient.get('/paper-template', { params: { syllabus_id: syllabusId } }),
+
   generateQuestionBank: (syllabusId) =>
     apiClient.post('/generate-question-bank', { syllabus_id: syllabusId }),
 
@@ -77,6 +89,9 @@ export const questionBankAPI = {
 
   regenerateQuestion: (questionId) =>
     apiClient.post(`/question-bank/${questionId}/regenerate`),
+
+  generateQuestionPaperFromTemplate: (syllabusId) =>
+    apiClient.post('/generate-question-paper-from-template', { syllabus_id: syllabusId }),
 
   generateQuestionPaper: (template) =>
     apiClient.post('/generate-question-paper', template),

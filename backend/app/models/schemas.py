@@ -186,3 +186,39 @@ class QuestionPaperTemplate(BaseModel):
     syllabus_id: str
     title: str = "Examination"
     sections: list[QuestionPaperTemplateSection]
+
+
+class PaperTemplateSubPart(BaseModel):
+    label: str = ""
+    marks: int = 0
+
+
+class PaperTemplateOption(BaseModel):
+    subparts: list[PaperTemplateSubPart] = []
+
+
+class PaperTemplateQuestionGroup(BaseModel):
+    question_number: int
+    unit_hint: str = ""
+    marks: int = 20
+    primary: PaperTemplateOption
+    alternative: PaperTemplateOption | None = None
+
+
+class PaperTemplateBlueprint(BaseModel):
+    title: str = "Examination"
+    total_marks: int = 0
+    duration_minutes: int = 180
+    question_groups: list[PaperTemplateQuestionGroup]
+
+
+class PaperTemplateOut(BaseModel):
+    id: str
+    syllabus_id: str
+    file_name: str
+    uploaded_at: str
+    blueprint: PaperTemplateBlueprint
+
+
+class TemplatePaperGenerationRequest(BaseModel):
+    syllabus_id: str
