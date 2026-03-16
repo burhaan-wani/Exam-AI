@@ -6,7 +6,10 @@ from app.utils.file_parser import extract_text
 
 logger = logging.getLogger(__name__)
 
-_UNIT_PATTERN = re.compile(r"^\s*unit\s*[-:]?\s*(\d+)\s*$", re.IGNORECASE)
+_UNIT_PATTERN = re.compile(
+    r"^\s*(unit|module|chapter|part)\s*[-:]?\s*([0-9]+|[ivxlcdm]+)\s*$",
+    re.IGNORECASE,
+)
 _IGNORED_LINE_PREFIXES = (
     "course objective",
     "course objectives",
@@ -53,8 +56,31 @@ def _normalize_line(line: str) -> str:
     return re.sub(r"\s+", " ", line).strip(" \t-:|")
 
 
-def _is_unit_heading(line: str) -> re.Match[str] | None:
-    return _UNIT_PATTERN.match(_normalize_line(line))
+def _normalize_unit_number(unit_number: str) -> str:
+    roman_map = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+    lowered = unit_number.lower()
+    if lowered.isdigit():
+        return str(int(lowered))
+
+    total = 0
+    prev = 0
+    for char in reversed(lowered):
+        value = roman_map.get(char, 0)
+        if value < prev:
+            total -= value
+        else:
+            total += value
+            prev = value
+    return str(total) if total > 0 else unit_number
+
+
+def _is_unit_heading(line: str) -> tuple[str, str] | None:
+    match = _UNIT_PATTERN.match(_normalize_line(line))
+    if not match:
+        return None
+    heading_type = match.group(1).capitalize()
+    heading_number = _normalize_unit_number(match.group(2))
+    return heading_type, heading_number
 
 
 def _should_skip_line(line: str) -> bool:
@@ -126,17 +152,17 @@ def _extract_topics_from_line(line: str) -> list[str]:
     return _dedupe_keep_order(topics)
 
 
-def _build_unit_record(unit_number: str, lines: list[str]) -> dict[str, Any]:
+def _build_unit_record(unit_label: str, unit_number: str, lines: list[str]) -> dict[str, Any]:
     extracted_topics: list[str] = []
     for line in lines:
         extracted_topics.extend(_extract_topics_from_line(line))
 
     extracted_topics = _dedupe_keep_order(extracted_topics)
     if not extracted_topics:
-        raise ValueError(f"Unit {unit_number} does not contain any parseable topics")
+        raise ValueError(f"{unit_label} {unit_number} does not contain any parseable topics")
 
     title = extracted_topics[0]
-    unit_name = f"Unit {unit_number}: {title}"
+    unit_name = f"{unit_label} {unit_number}: {title}"
     return {
         "name": unit_name,
         "unit": unit_name,
@@ -154,6 +180,7 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
     lines = [_normalize_line(line) for line in raw_text.splitlines()]
 
     parsed_units: list[dict[str, Any]] = []
+    current_unit_label: str | None = None
     current_unit_number: str | None = None
     current_unit_lines: list[str] = []
     skipping_hands_on = False
@@ -167,7 +194,8 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
 
         if current_unit_number and _is_terminal_section_heading(line):
             if current_unit_lines:
-                parsed_units.append(_build_unit_record(current_unit_number, current_unit_lines))
+                parsed_units.append(_build_unit_record(current_unit_label or "Unit", current_unit_number, current_unit_lines))
+            current_unit_label = None
             current_unit_number = None
             current_unit_lines = []
             break
@@ -175,8 +203,8 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
         unit_match = _is_unit_heading(line)
         if unit_match:
             if current_unit_number and current_unit_lines:
-                parsed_units.append(_build_unit_record(current_unit_number, current_unit_lines))
-            current_unit_number = unit_match.group(1)
+                parsed_units.append(_build_unit_record(current_unit_label or "Unit", current_unit_number, current_unit_lines))
+            current_unit_label, current_unit_number = unit_match
             current_unit_lines = []
             skipping_hands_on = False
             continue
@@ -197,11 +225,11 @@ async def parse_syllabus_units(file_bytes: bytes, filename: str) -> tuple[str, l
             current_unit_lines.append(normalized_line)
 
     if current_unit_number and current_unit_lines:
-        parsed_units.append(_build_unit_record(current_unit_number, current_unit_lines))
+        parsed_units.append(_build_unit_record(current_unit_label or "Unit", current_unit_number, current_unit_lines))
 
     if not parsed_units:
         raise ValueError(
-            "Could not identify any syllabus units. Make sure the file contains headings like 'Unit 1' or 'Unit - 1'."
+            "Could not identify any syllabus units. Make sure the file contains headings like 'Unit 1', 'Module 2', or 'Chapter IV'."
         )
 
     logger.info("Parsed %d units from syllabus '%s'", len(parsed_units), filename)
