@@ -203,7 +203,6 @@ const QuestionBankPage = () => {
                 <div className="flex items-center gap-2">
                   <Badge>{q.bloom_level}</Badge>
                   <Badge variant="secondary">{q.difficulty}</Badge>
-                  <span className="text-xs text-gray-600">{q.marks} marks</span>
                   {q.unit && (
                     <span className="ml-auto text-xs text-gray-500">Unit: {q.unit}</span>
                   )}

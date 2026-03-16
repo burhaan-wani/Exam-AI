@@ -14,12 +14,24 @@ from app.models.schemas import QuestionPaperTemplate, PaperQuestion
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+_DEFAULT_MARKS_BY_BLOOM = {
+    "Remember": 2,
+    "Apply": 5,
+    "Analyze": 10,
+}
 
 
 def _get_chat_model() -> ChatOpenAI:
     os.environ["OPENAI_API_KEY"] = settings.openrouter_api_key
     os.environ["OPENAI_BASE_URL"] = "https://openrouter.ai/api/v1"
     return ChatOpenAI(model=settings.openrouter_model, temperature=0.2)
+
+
+def _resolve_question_marks(doc: dict) -> int:
+    stored_marks = int(doc.get("marks", 0) or 0)
+    if stored_marks > 0:
+        return stored_marks
+    return _DEFAULT_MARKS_BY_BLOOM.get(doc.get("bloom_level", ""), 5)
 
 
 PAPER_SELECTION_TEMPLATE = ChatPromptTemplate.from_messages(
@@ -71,7 +83,7 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
             "id": str(d["_id"]),
             "unit": d.get("unit", ""),
             "bloom_level": d.get("bloom_level", ""),
-            "marks": d.get("marks", 5),
+            "marks": _resolve_question_marks(d),
         }
         for d in bank_docs
     ]
@@ -122,7 +134,7 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
             if not qid or qid not in bank_by_id:
                 continue
             src = bank_by_id[qid]
-            marks = src.get("marks", 5)
+            marks = _resolve_question_marks(src)
             pq = PaperQuestion(
                 question_number=q_number,
                 question_text=src.get("question", ""),

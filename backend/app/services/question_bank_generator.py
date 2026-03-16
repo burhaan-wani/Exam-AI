@@ -17,9 +17,9 @@ from app.services.rag_retriever import build_retriever_for_syllabus
 logger = logging.getLogger(__name__)
 settings = get_settings()
 _BLOOM_CONFIG = {
-    1: {"category": BloomLevel.REMEMBER, "difficulty": "Level 1", "marks": 2},
-    2: {"category": BloomLevel.APPLY, "difficulty": "Level 2", "marks": 5},
-    3: {"category": BloomLevel.ANALYZE, "difficulty": "Level 3", "marks": 10},
+    1: {"category": BloomLevel.REMEMBER, "difficulty": "Level 1", "paper_marks": 2},
+    2: {"category": BloomLevel.APPLY, "difficulty": "Level 2", "paper_marks": 5},
+    3: {"category": BloomLevel.ANALYZE, "difficulty": "Level 3", "paper_marks": 10},
 }
 
 
@@ -40,16 +40,18 @@ QUESTION_BANK_TEMPLATE = ChatPromptTemplate.from_messages(
         (
             "human",
             """Course unit: {unit_name}
-Source topic: {topic_name}
+Available sub-topics:
+{topic_list}
 
 Instructions:
 - Ignore course objectives, outcomes, and prerequisites.
-- Generate questions only from the source topic.
-- Generate exactly 3 questions for each of these Bloom levels:
-  - Level 1 (Remember)
-  - Level 2 (Apply)
-  - Level 3 (Analyze)
-- Keep the source topic explicit and accurate.
+- Generate exactly 20 questions in total for this unit.
+- Use only the listed sub-topics as source topics.
+- Distribute the questions across these Bloom levels:
+  - 7 questions for Level 1 (Remember)
+  - 7 questions for Level 2 (Apply)
+  - 6 questions for Level 3 (Analyze)
+- Every question must include the exact source topic it came from.
 
 If context is provided, base the questions on that material.
 
@@ -58,10 +60,9 @@ Return ONLY valid JSON in this exact format:
   "questions": [
     {{
       "question": "Question text here",
-      "topic": "{topic_name}",
+      "topic": "One of the listed sub-topics",
       "bloom_level": 1,
-      "bloom_category": "Remember",
-      "marks": 2
+      "bloom_category": "Remember"
     }}
   ]
 }}
@@ -84,13 +85,13 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
     if not syllabus_topics:
         raise ValueError("Syllabus has no extracted topics/units to generate from")
 
-    unit_topics: list[tuple[str, str]] = []
+    unit_topics: list[tuple[str, list[str]]] = []
     for unit_record in syllabus_topics:
         unit_name = unit_record.get("unit") or unit_record.get("name")
         source_topics = unit_record.get("subtopics") or [unit_record.get("name", "")]
-        for source_topic in source_topics:
-            if unit_name and source_topic:
-                unit_topics.append((unit_name, source_topic))
+        source_topics = [topic for topic in source_topics if topic]
+        if unit_name and source_topics:
+            unit_topics.append((unit_name, source_topics))
 
     if not unit_topics:
         raise ValueError("Could not derive any topics from the syllabus units")
@@ -100,15 +101,15 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
     question_items: List[QuestionBankItem] = []
     await question_bank_collection.delete_many({"syllabus_id": syllabus_id})
 
-    for unit_name, topic_name in unit_topics:
+    for unit_name, topic_names in unit_topics:
         context_text = ""
         if retriever:
-            docs = await retriever.ainvoke(f"{unit_name} {topic_name}")
+            docs = await retriever.ainvoke(f"{unit_name} {' '.join(topic_names)}")
             context_text = "\n\n".join(doc.page_content for doc in docs)
 
         messages = QUESTION_BANK_TEMPLATE.format_messages(
             unit_name=unit_name,
-            topic_name=topic_name,
+            topic_list="\n".join(f"- {topic}" for topic in topic_names),
             context=context_text,
         )
 
@@ -124,7 +125,7 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
 
         try:
             data = json.loads(content)
-            questions = data.get("questions", [])
+            questions = data.get("questions", [])[:20]
         except json.JSONDecodeError as error:
             logger.error("Failed to parse question bank JSON for unit %s: %s", unit_name, error)
             continue
@@ -133,14 +134,17 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
             bloom_level_int = int(question.get("bloom_level", 1))
             bloom_config = _BLOOM_CONFIG.get(bloom_level_int, _BLOOM_CONFIG[1])
             bloom = bloom_config["category"]
+            source_topic = question.get("topic") or topic_names[0]
+            if source_topic not in topic_names:
+                source_topic = topic_names[0]
 
             doc = {
                 "syllabus_id": syllabus_id,
                 "question": question.get("question", ""),
                 "unit": unit_name,
-                "topic": question.get("topic") or topic_name,
+                "topic": source_topic,
                 "bloom_level": bloom.value,
-                "marks": bloom_config["marks"],
+                "marks": 0,
                 "difficulty": bloom_config["difficulty"],
                 "source_context": context_text[:1000] if context_text else None,
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -160,6 +164,6 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
                 )
             )
 
-        logger.info("Generated %d questions for unit '%s' topic '%s'", len(questions), unit_name, topic_name)
+        logger.info("Generated %d questions for unit '%s'", len(questions), unit_name)
 
     return question_items

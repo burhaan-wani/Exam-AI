@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _fallback_marks_for_bloom(bloom_level: str) -> int:
+    return {
+        "Remember": 2,
+        "Apply": 5,
+        "Analyze": 10,
+    }.get(bloom_level, 5)
+
+
 async def _get_owned_syllabus_or_404(syllabus_id: str, teacher_id: str) -> dict:
     try:
         query = {"_id": ObjectId(syllabus_id), "user_id": teacher_id}
@@ -250,7 +258,9 @@ async def review_question_in_paper(
         {
             "question_text": replacement.get("question", ""),
             "topic": replacement.get("topic", ""),
-            "marks": replacement.get("marks", 5),
+            "marks": int(replacement.get("marks", 0) or 0) or _fallback_marks_for_bloom(
+                replacement.get("bloom_level", bloom_level)
+            ),
             "bloom_level": replacement.get("bloom_level", bloom_level),
             "unit": replacement.get("unit", unit),
             "bank_id": str(replacement["_id"]),
