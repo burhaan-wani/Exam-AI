@@ -16,6 +16,11 @@ const statusTone = {
   rejected: 'destructive',
 }
 
+const formatSubpartMarks = (subparts = []) =>
+  subparts
+    .map((subpart) => `${subpart.label || 'full'}:${subpart.marks || 0}`)
+    .join(', ')
+
 const QuestionBankPage = () => {
   const { syllabusId } = useParams()
   const navigate = useNavigate()
@@ -323,11 +328,13 @@ const QuestionBankPage = () => {
                 {templateDoc.blueprint?.total_marks || 0}
               </p>
               <div className="space-y-1">
-                {(templateDoc.blueprint?.question_groups || []).slice(0, 6).map((group) => (
+                {(templateDoc.blueprint?.question_groups || []).map((group) => (
                   <p key={group.question_number}>
                     Q{group.question_number} | {group.unit_hint || 'Unit unspecified'} | {group.marks} marks
                     {group.alternative ? ' | OR pattern' : ''}
                     {group.primary?.subparts?.length > 1 ? ` | ${group.primary.subparts.length} sub-parts` : ''}
+                    {group.primary?.subparts?.length > 0 ? ` | Primary: ${formatSubpartMarks(group.primary.subparts)}` : ''}
+                    {group.alternative?.subparts?.length > 0 ? ` | OR: ${formatSubpartMarks(group.alternative.subparts)}` : ''}
                   </p>
                 ))}
               </div>

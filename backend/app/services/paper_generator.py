@@ -6,11 +6,12 @@ import re
 from datetime import datetime, timezone
 from typing import List
 
+from bson import ObjectId
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.config import get_settings
-from app.database import question_bank_collection, final_question_paper_collection, paper_templates_collection
+from app.database import question_bank_collection, final_question_paper_collection, paper_templates_collection, syllabus_collection
 from app.models.schemas import PaperQuestion, QuestionPaperTemplate, QuestionReviewStatus
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,37 @@ def _extract_unit_key(unit_label: str) -> str:
     if not match:
         return (unit_label or "").strip().lower()
     return f"{match.group(1)} {match.group(2)}"
+
+
+def _ordered_syllabus_units(syllabus_topics: list[dict]) -> list[str]:
+    units = [topic.get("unit", "") for topic in syllabus_topics if topic.get("unit")]
+    return sorted(
+        units,
+        key=lambda unit: tuple(int(num) for num in re.findall(r"\d+", unit)) or (999,),
+    )
+
+
+def _resolve_group_unit_hint(group: dict, group_index: int, total_groups: int, ordered_units: list[str]) -> str:
+    if ordered_units and total_groups >= len(ordered_units) and total_groups % len(ordered_units) == 0:
+        groups_per_unit = max(total_groups // len(ordered_units), 1)
+        unit_index = min((group_index - 1) // groups_per_unit, len(ordered_units) - 1)
+        return ordered_units[unit_index]
+
+    if ordered_units and total_groups == len(ordered_units):
+        return ordered_units[min(group_index - 1, len(ordered_units) - 1)]
+
+    explicit_hint = str(group.get("unit_hint", "") or "").strip()
+    if explicit_hint:
+        explicit_key = _extract_unit_key(explicit_hint)
+        for unit in ordered_units:
+            if _extract_unit_key(unit) == explicit_key:
+                return unit
+        return explicit_hint
+
+    if not ordered_units:
+        return explicit_hint
+
+    return ordered_units[(group_index - 1) % len(ordered_units)]
 
 
 def _select_bank_docs(bank_docs: list[dict], used_ids: set[str], unit_hint: str, count: int) -> list[dict]:
@@ -98,16 +130,24 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
     if not question_groups:
         raise ValueError("The uploaded paper template does not contain any usable question groups.")
 
+    syllabus_doc = None
+    try:
+        syllabus_doc = await syllabus_collection.find_one({"_id": ObjectId(syllabus_id)})
+    except Exception:
+        syllabus_doc = None
+    ordered_units = _ordered_syllabus_units((syllabus_doc or {}).get("topics", []))
+
     used_ids: set[str] = set()
     questions: List[PaperQuestion] = []
     total_marks = int(blueprint.get("total_marks", 0) or 0)
     duration_minutes = int(blueprint.get("duration_minutes", 180) or 180)
 
-    for group in question_groups:
+    for group_index, group in enumerate(question_groups, start=1):
+        group_unit_hint = _resolve_group_unit_hint(group, group_index, len(question_groups), ordered_units)
         primary = group.get("primary", {}) or {}
         alternative = group.get("alternative")
         subparts = primary.get("subparts", []) or [{"label": "", "marks": int(group.get("marks", 20) or 20)}]
-        primary_docs = _select_bank_docs(bank_docs, used_ids, group.get("unit_hint", ""), len(subparts))
+        primary_docs = _select_bank_docs(bank_docs, used_ids, group_unit_hint, len(subparts))
         for doc in primary_docs:
             used_ids.add(str(doc["_id"]))
 
@@ -119,7 +159,7 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
             alternative_docs = _select_bank_docs(
                 bank_docs,
                 used_ids,
-                group.get("unit_hint", ""),
+                group_unit_hint,
                 len(alternative_subparts),
             )
             for doc in alternative_docs:
@@ -128,7 +168,7 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
             all_docs.extend(alternative_docs)
 
         question_number = int(group.get("question_number", len(questions) + 1))
-        unit_hint = group.get("unit_hint", "") or primary_docs[0].get("unit", "")
+        unit_hint = group_unit_hint or primary_docs[0].get("unit", "")
         topics = ", ".join(dict.fromkeys(doc.get("topic", "") for doc in all_docs if doc.get("topic")))
 
         questions.append(
