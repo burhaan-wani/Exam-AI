@@ -24,7 +24,62 @@ def extract_images_from_pdf(file_bytes: bytes) -> list[str]:
     reader = PdfReader(io.BytesIO(file_bytes))
     image_urls: list[str] = []
 
+    def _mime_type_from_image(image_obj, image_name: str) -> str:
+        lowered_name = (image_name or "").lower()
+        filters = image_obj.get("/Filter")
+        if isinstance(filters, list):
+            filters = [str(item) for item in filters]
+        elif filters:
+            filters = [str(filters)]
+        else:
+            filters = []
+
+        if lowered_name.endswith(".png") or "/FlateDecode" in filters:
+            return "image/png"
+        if lowered_name.endswith(".webp"):
+            return "image/webp"
+        if lowered_name.endswith(".jp2") or "/JPXDecode" in filters:
+            return "image/jp2"
+        return "image/jpeg"
+
+    def _append_image(image_obj, image_name: str) -> None:
+        try:
+            data = image_obj.get_data()
+        except Exception:
+            data = None
+        if not data:
+            return
+
+        mime_type = _mime_type_from_image(image_obj, image_name)
+        encoded = base64.b64encode(data).decode("ascii")
+        image_urls.append(f"data:{mime_type};base64,{encoded}")
+
+    def _extract_from_xobjects(xobjects) -> None:
+        try:
+            resolved = xobjects.get_object()
+        except Exception:
+            resolved = xobjects
+
+        for image_name, image_obj in (resolved or {}).items():
+            try:
+                image_obj = image_obj.get_object()
+            except Exception:
+                pass
+
+            subtype = str(image_obj.get("/Subtype", ""))
+            if subtype == "/Image":
+                _append_image(image_obj, str(image_name))
+                continue
+
+            if subtype == "/Form":
+                nested_resources = image_obj.get("/Resources")
+                if nested_resources:
+                    nested_xobjects = nested_resources.get("/XObject")
+                    if nested_xobjects:
+                        _extract_from_xobjects(nested_xobjects)
+
     for page in reader.pages:
+        page_found_image = False
         try:
             images = getattr(page, "images", [])
         except Exception:
@@ -45,6 +100,22 @@ def extract_images_from_pdf(file_bytes: bytes) -> list[str]:
 
             encoded = base64.b64encode(data).decode("ascii")
             image_urls.append(f"data:{mime_type};base64,{encoded}")
+            page_found_image = True
+
+        if page_found_image:
+            continue
+
+        try:
+            resources = page.get("/Resources")
+        except Exception:
+            resources = None
+
+        if not resources:
+            continue
+
+        xobjects = resources.get("/XObject")
+        if xobjects:
+            _extract_from_xobjects(xobjects)
 
     return image_urls
 
