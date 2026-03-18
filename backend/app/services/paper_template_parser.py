@@ -9,7 +9,11 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from app.config import get_settings
-from app.models.schemas import PaperTemplateBlueprint
+from app.models.schemas import (
+    PaperTemplateBlueprint,
+    PaperTemplateValidationIssue,
+    PaperTemplateValidationResult,
+)
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -39,7 +43,8 @@ Requirements:
 - Capture total marks and duration if present.
 - Extract every main numbered question group in order.
 - Count every numbered question group shown in the template. Do not merge separate question numbers.
-- An OR alternative belongs to the same numbered question group and does not increase question count.
+- If the template shows `Question 1 ... (OR) ... Question 2`, keep Question 1 and Question 2 as separate groups and set `"or_with_next": true` on Question 1.
+- Use `"alternative"` only when the OR is inside the same numbered question group.
 - For each question group, infer the unit if possible from ordering or topic hints.
 - Capture the total marks for the question group.
 - Capture sub-part labels and marks for both the primary and alternative options.
@@ -56,6 +61,7 @@ Return ONLY valid JSON in this exact format:
       "question_number": 1,
       "unit_hint": "Unit 1",
       "marks": 20,
+      "or_with_next": true,
       "primary": {{
         "subparts": [
           {{"label": "a", "marks": 8}},
@@ -90,7 +96,8 @@ Requirements:
 - This is only one page of a larger template.
 - Extract every numbered main question group visible on this page.
 - Do not merge separate question numbers.
-- An OR alternative belongs to the same numbered question group.
+- If the OR is between Question N and Question N+1, set `"or_with_next": true` on Question N.
+- Use `"alternative"` only when the OR is inside the same numbered question group.
 - Preserve sub-part counts and marks exactly when visible.
 - If a question is a single full question, represent it as one subpart with an empty label and the full marks.
 - Return only the visible groups from this page, in order.
@@ -106,6 +113,7 @@ Return ONLY valid JSON in this exact format:
       "question_number": 1,
       "unit_hint": "Unit 1",
       "marks": 20,
+      "or_with_next": true,
       "primary": {{
         "subparts": [
           {{"label": "a", "marks": 8}},
@@ -133,7 +141,8 @@ Known syllabus units:
 Requirements:
 - Extract every numbered main question group across all pages.
 - Count every numbered question group shown in the template. Do not merge separate question numbers.
-- An OR alternative belongs to the same numbered question group.
+- If the OR is between Question N and Question N+1, keep both numbered questions and set `"or_with_next": true` on Question N.
+- Use `"alternative"` only when the OR is inside the same numbered question group.
 - Preserve question order, sub-part counts, and marks exactly when visible.
 - If a question is a single full question, represent it as one subpart with an empty label and the full marks.
 - Capture the paper title, duration, and total marks if visible.
@@ -149,6 +158,7 @@ Return ONLY valid JSON in this exact format:
       "question_number": 1,
       "unit_hint": "Unit 1",
       "marks": 20,
+      "or_with_next": true,
       "primary": {{
         "subparts": [
           {{"label": "a", "marks": 8}},
@@ -230,6 +240,7 @@ def _normalize_question_group(group: dict, fallback_number: int) -> dict:
         "unit_hint": unit_hint,
         "marks": group_marks,
         "primary": {"subparts": primary_subparts},
+        "or_with_next": bool(group.get("or_with_next", False)),
     }
 
     alternative = group.get("alternative")
@@ -281,6 +292,84 @@ def _validate_blueprint_data(data: dict) -> PaperTemplateBlueprint:
     if not blueprint.question_groups:
         raise ValueError("The uploaded template did not contain any recognizable question groups.")
     return blueprint
+
+
+def validate_paper_template_blueprint(blueprint: PaperTemplateBlueprint) -> PaperTemplateValidationResult:
+    issues: list[PaperTemplateValidationIssue] = []
+    question_numbers = [group.question_number for group in blueprint.question_groups]
+
+    if not blueprint.question_groups:
+        issues.append(PaperTemplateValidationIssue(message="Template does not contain any question groups.", field="question_groups"))
+        return PaperTemplateValidationResult(is_valid=False, issues=issues)
+
+    expected_numbers = list(range(1, len(question_numbers) + 1))
+    if sorted(question_numbers) != expected_numbers:
+        issues.append(
+            PaperTemplateValidationIssue(
+                message="Question numbers should be continuous starting from 1.",
+                field="question_number",
+            )
+        )
+
+    total_from_groups = 0
+    answerable_total_marks = 0
+    for index, group in enumerate(blueprint.question_groups):
+        primary_total = sum(part.marks for part in group.primary.subparts)
+        if primary_total != group.marks:
+            issues.append(
+                PaperTemplateValidationIssue(
+                    message=f"Primary subpart marks sum to {primary_total}, expected {group.marks}.",
+                    question_number=group.question_number,
+                    field="primary.subparts",
+                )
+            )
+
+        if group.alternative:
+            alternative_total = sum(part.marks for part in group.alternative.subparts)
+            if alternative_total != group.marks:
+                issues.append(
+                    PaperTemplateValidationIssue(
+                        message=f"Alternative subpart marks sum to {alternative_total}, expected {group.marks}.",
+                        question_number=group.question_number,
+                        field="alternative.subparts",
+                    )
+                )
+
+        if group.or_with_next:
+            if index == len(blueprint.question_groups) - 1:
+                issues.append(
+                    PaperTemplateValidationIssue(
+                        message="The last question cannot be marked as OR with next question.",
+                        question_number=group.question_number,
+                        field="or_with_next",
+                    )
+                )
+            elif group.alternative:
+                issues.append(
+                    PaperTemplateValidationIssue(
+                        message="Use either OR with next question or an internal alternative, not both.",
+                        question_number=group.question_number,
+                        field="or_with_next",
+                    )
+                )
+
+        total_from_groups += group.marks
+        if group.or_with_next:
+            answerable_total_marks += group.marks
+        elif index > 0 and blueprint.question_groups[index - 1].or_with_next:
+            continue
+        else:
+            answerable_total_marks += group.marks
+
+    if blueprint.total_marks > 0 and answerable_total_marks != blueprint.total_marks:
+        issues.append(
+            PaperTemplateValidationIssue(
+                message=f"Answerable question marks sum to {answerable_total_marks}, but total marks is {blueprint.total_marks}.",
+                field="total_marks",
+            )
+        )
+
+    return PaperTemplateValidationResult(is_valid=len(issues) == 0, issues=issues)
 
 
 def _validate_blueprint(raw: str) -> PaperTemplateBlueprint:

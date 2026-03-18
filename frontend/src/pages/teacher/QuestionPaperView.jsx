@@ -182,6 +182,12 @@ const QuestionPaperView = () => {
               <div className="ml-6 border-l-2 border-gray-300 pl-4 py-8 text-gray-400 text-sm">
                 [Answer space for student]
               </div>
+
+              {question.or_with_next && (
+                <div className="my-6 text-center text-lg font-semibold text-gray-700">
+                  (OR)
+                </div>
+              )}
             </div>
           ))}
         </div>

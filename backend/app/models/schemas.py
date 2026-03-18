@@ -87,6 +87,7 @@ class PaperQuestion(BaseModel):
     model_answer: str = ""
     unit: str = ""
     bank_id: str = ""
+    or_with_next: bool = False
 
 
 class FinalPaperOut(BaseModel):
@@ -203,6 +204,7 @@ class PaperTemplateQuestionGroup(BaseModel):
     marks: int = 20
     primary: PaperTemplateOption
     alternative: PaperTemplateOption | None = None
+    or_with_next: bool = False
 
 
 class PaperTemplateBlueprint(BaseModel):
@@ -212,11 +214,28 @@ class PaperTemplateBlueprint(BaseModel):
     question_groups: list[PaperTemplateQuestionGroup]
 
 
+class PaperTemplateValidationIssue(BaseModel):
+    level: str = "error"
+    message: str
+    question_number: int | None = None
+    field: str = ""
+
+
+class PaperTemplateValidationResult(BaseModel):
+    is_valid: bool = False
+    issues: list[PaperTemplateValidationIssue] = []
+
+
 class PaperTemplateOut(BaseModel):
     id: str
     syllabus_id: str
     file_name: str
     uploaded_at: str
+    blueprint: PaperTemplateBlueprint
+    validation: PaperTemplateValidationResult
+
+
+class PaperTemplateUpdateRequest(BaseModel):
     blueprint: PaperTemplateBlueprint
 
 

@@ -76,6 +76,9 @@ export const questionBankAPI = {
   getPaperTemplate: (syllabusId) =>
     apiClient.get('/paper-template', { params: { syllabus_id: syllabusId } }),
 
+  updatePaperTemplate: (syllabusId, blueprint) =>
+    apiClient.patch('/paper-template', { blueprint }, { params: { syllabus_id: syllabusId } }),
+
   generateQuestionBank: (syllabusId) =>
     apiClient.post('/generate-question-bank', { syllabus_id: syllabusId }),
 

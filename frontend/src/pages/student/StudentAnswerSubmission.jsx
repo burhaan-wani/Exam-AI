@@ -140,46 +140,54 @@ const StudentAnswerSubmission = () => {
       {/* Question Answer Section */}
       <div className="space-y-6">
         {paper.questions.map((question) => (
-          <Card key={question.question_number}>
-            <CardHeader>
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle>Question {question.question_number}</CardTitle>
-                  <CardDescription>{question.topic}</CardDescription>
-                </div>
-                <span className="bg-gray-200 px-3 py-1 rounded text-sm font-semibold">
-                  {question.marks} marks
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Question Text */}
-              <div>
-                <p className="text-gray-900 font-medium mb-2 whitespace-pre-line">{question.question_text}</p>
-
-                {/* Sub-questions */}
-                {question.sub_questions && question.sub_questions.length > 0 && (
-                  <div className="ml-4 space-y-1 text-sm text-gray-700">
-                    {question.sub_questions.map((sub, idx) => (
-                      <p key={idx}>
-                        <strong>{sub.label}</strong> ({sub.marks} marks): {sub.text}
-                      </p>
-                    ))}
+          <div key={question.question_number} className="space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Question {question.question_number}</CardTitle>
+                    <CardDescription>{question.topic}</CardDescription>
                   </div>
-                )}
-              </div>
+                  <span className="bg-gray-200 px-3 py-1 rounded text-sm font-semibold">
+                    {question.marks} marks
+                  </span>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Question Text */}
+                <div>
+                  <p className="text-gray-900 font-medium mb-2 whitespace-pre-line">{question.question_text}</p>
 
-              {/* Answer Box */}
-              <Textarea
-                placeholder="Write your answer here..."
-                value={answers[question.question_number] || ''}
-                onChange={(e) =>
-                  handleAnswerChange(question.question_number, e.target.value)
-                }
-                rows={6}
-              />
-            </CardContent>
-          </Card>
+                  {/* Sub-questions */}
+                  {question.sub_questions && question.sub_questions.length > 0 && (
+                    <div className="ml-4 space-y-1 text-sm text-gray-700">
+                      {question.sub_questions.map((sub, idx) => (
+                        <p key={idx}>
+                          <strong>{sub.label}</strong> ({sub.marks} marks): {sub.text}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Answer Box */}
+                <Textarea
+                  placeholder="Write your answer here..."
+                  value={answers[question.question_number] || ''}
+                  onChange={(e) =>
+                    handleAnswerChange(question.question_number, e.target.value)
+                  }
+                  rows={6}
+                />
+              </CardContent>
+            </Card>
+
+            {question.or_with_next && (
+              <div className="text-center text-lg font-semibold text-gray-600">
+                (OR)
+              </div>
+            )}
+          </div>
         ))}
       </div>
 

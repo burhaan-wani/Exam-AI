@@ -16,14 +16,16 @@ from app.models.schemas import (
     QuestionBankItem,
     QuestionBankCreateRequest,
     QuestionBankUpdateRequest,
+    PaperTemplateBlueprint,
     PaperTemplateOut,
+    PaperTemplateUpdateRequest,
     QuestionPaperTemplate,
     QuestionReviewStatus,
     TemplatePaperGenerationRequest,
 )
 from app.services.document_loader import build_langchain_documents, mark_reference_document_indexed, save_reference_document
 from app.services.paper_generator import generate_paper_from_question_bank, generate_paper_from_uploaded_template
-from app.services.paper_template_parser import parse_paper_template_blueprint
+from app.services.paper_template_parser import parse_paper_template_blueprint, validate_paper_template_blueprint
 from app.services.question_bank_generator import (
     _format_question_bank_item,
     generate_question_bank_for_syllabus,
@@ -90,6 +92,20 @@ async def _get_latest_template_or_404(syllabus_id: str) -> dict:
     if not doc:
         raise HTTPException(404, "Paper template not found")
     return doc
+
+
+def _build_template_response(doc: dict) -> PaperTemplateOut:
+    raw_blueprint = doc.get("blueprint", {})
+    blueprint = raw_blueprint if isinstance(raw_blueprint, PaperTemplateBlueprint) else PaperTemplateBlueprint.model_validate(raw_blueprint)
+    validation = validate_paper_template_blueprint(blueprint)
+    return PaperTemplateOut(
+        id=str(doc["_id"]),
+        syllabus_id=doc.get("syllabus_id", ""),
+        file_name=doc.get("file_name", ""),
+        uploaded_at=doc.get("uploaded_at", ""),
+        blueprint=blueprint,
+        validation=validation,
+    )
 
 
 @router.post("/upload-syllabus")
@@ -278,14 +294,8 @@ async def upload_paper_template(
         "uploaded_at": uploaded_at,
     }
     result = await paper_templates_collection.insert_one(doc)
-
-    return PaperTemplateOut(
-        id=str(result.inserted_id),
-        syllabus_id=syllabus_id,
-        file_name=filename,
-        uploaded_at=uploaded_at,
-        blueprint=blueprint,
-    )
+    doc["_id"] = result.inserted_id
+    return _build_template_response(doc)
 
 
 @router.get("/paper-template", response_model=PaperTemplateOut)
@@ -296,12 +306,35 @@ async def get_paper_template(
     """Get the latest uploaded paper template for a syllabus."""
     await _get_owned_syllabus_or_404(syllabus_id, current_user["id"])
     doc = await _get_latest_template_or_404(syllabus_id)
+    return _build_template_response(doc)
+
+
+@router.patch("/paper-template", response_model=PaperTemplateOut)
+async def update_paper_template(
+    syllabus_id: str,
+    body: PaperTemplateUpdateRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    """Save a teacher-reviewed blueprint for the latest uploaded paper template."""
+    await _get_owned_syllabus_or_404(syllabus_id, current_user["id"])
+    doc = await _get_latest_template_or_404(syllabus_id)
+    updated_blueprint = body.blueprint
+    validation = validate_paper_template_blueprint(updated_blueprint)
+    updated_at = datetime.now(timezone.utc).isoformat()
+
+    await paper_templates_collection.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"blueprint": updated_blueprint.model_dump(), "reviewed_at": updated_at}},
+    )
+    doc["blueprint"] = updated_blueprint
+    doc["reviewed_at"] = updated_at
     return PaperTemplateOut(
         id=str(doc["_id"]),
         syllabus_id=doc.get("syllabus_id", ""),
         file_name=doc.get("file_name", ""),
         uploaded_at=doc.get("uploaded_at", ""),
-        blueprint=doc.get("blueprint", {}),
+        blueprint=updated_blueprint,
+        validation=validation,
     )
 
 
@@ -312,6 +345,11 @@ async def generate_question_paper_from_template(
 ):
     """Generate a paper from curated bank questions using the uploaded paper template blueprint."""
     await _get_owned_syllabus_or_404(body.syllabus_id, current_user["id"])
+    template_doc = await _get_latest_template_or_404(body.syllabus_id)
+    blueprint = PaperTemplateBlueprint.model_validate(template_doc.get("blueprint", {}))
+    validation = validate_paper_template_blueprint(blueprint)
+    if not validation.is_valid:
+        raise HTTPException(400, "Review and fix the template blueprint before generating the final paper.")
     try:
         paper_doc = await generate_paper_from_uploaded_template(body.syllabus_id)
     except ValueError as e:

@@ -21,6 +21,8 @@ const formatSubpartMarks = (subparts = []) =>
     .map((subpart) => `${subpart.label || 'full'}:${subpart.marks || 0}`)
     .join(', ')
 
+const cloneBlueprint = (blueprint) => JSON.parse(JSON.stringify(blueprint || {}))
+
 const QuestionBankPage = () => {
   const { syllabusId } = useParams()
   const navigate = useNavigate()
@@ -33,6 +35,8 @@ const QuestionBankPage = () => {
   const [templateFile, setTemplateFile] = useState(null)
   const [templateDoc, setTemplateDoc] = useState(null)
   const [uploadingTemplate, setUploadingTemplate] = useState(false)
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [editableBlueprint, setEditableBlueprint] = useState(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [unitFilter, setUnitFilter] = useState('all')
   const [bloomFilter, setBloomFilter] = useState('all')
@@ -82,8 +86,10 @@ const QuestionBankPage = () => {
     try {
       const response = await questionBankAPI.getPaperTemplate(syllabusId)
       setTemplateDoc(response.data)
+      setEditableBlueprint(cloneBlueprint(response.data.blueprint))
     } catch {
       setTemplateDoc(null)
+      setEditableBlueprint(null)
     }
   }
 
@@ -130,6 +136,10 @@ const QuestionBankPage = () => {
       toast.error('Upload a previous paper template before generating the final paper')
       return
     }
+    if (!templateDoc.validation?.is_valid) {
+      toast.error('Review and fix the blueprint issues before generating the final paper')
+      return
+    }
 
     try {
       const response = await questionBankAPI.generateQuestionPaperFromTemplate(syllabusId)
@@ -150,12 +160,112 @@ const QuestionBankPage = () => {
     try {
       const response = await questionBankAPI.uploadPaperTemplate(syllabusId, templateFile)
       setTemplateDoc(response.data)
+      setEditableBlueprint(cloneBlueprint(response.data.blueprint))
       setTemplateFile(null)
       toast.success('Paper template uploaded and blueprint extracted!')
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload paper template')
     } finally {
       setUploadingTemplate(false)
+    }
+  }
+
+  const handleBlueprintMetaChange = (field, value) => {
+    setEditableBlueprint((prev) => ({
+      ...prev,
+      [field]: field === 'title' ? value : Number(value) || 0,
+    }))
+  }
+
+  const handleGroupChange = (groupIndex, field, value) => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      next.question_groups[groupIndex][field] =
+        field === 'unit_hint' ? value : field === 'or_with_next' ? value : Number(value) || 0
+      return next
+    })
+  }
+
+  const handleSubpartChange = (groupIndex, optionKey, subpartIndex, field, value) => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      next.question_groups[groupIndex][optionKey].subparts[subpartIndex][field] =
+        field === 'label' ? value : Number(value) || 0
+      return next
+    })
+  }
+
+  const addSubpart = (groupIndex, optionKey) => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      if (!next.question_groups[groupIndex][optionKey]) {
+        next.question_groups[groupIndex][optionKey] = { subparts: [] }
+      }
+      next.question_groups[groupIndex][optionKey].subparts.push({ label: '', marks: 0 })
+      return next
+    })
+  }
+
+  const removeSubpart = (groupIndex, optionKey, subpartIndex) => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      next.question_groups[groupIndex][optionKey].subparts.splice(subpartIndex, 1)
+      return next
+    })
+  }
+
+  const addQuestionGroup = () => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      const nextNumber = (next.question_groups?.length || 0) + 1
+      next.question_groups = next.question_groups || []
+      next.question_groups.push({
+        question_number: nextNumber,
+        unit_hint: '',
+        marks: 20,
+        or_with_next: false,
+        primary: { subparts: [{ label: '', marks: 20 }] },
+        alternative: null,
+      })
+      return next
+    })
+  }
+
+  const removeQuestionGroup = (groupIndex) => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      next.question_groups.splice(groupIndex, 1)
+      next.question_groups = next.question_groups.map((group, idx) => ({
+        ...group,
+        question_number: idx + 1,
+      }))
+      return next
+    })
+  }
+
+  const toggleAlternative = (groupIndex) => {
+    setEditableBlueprint((prev) => {
+      const next = cloneBlueprint(prev)
+      const group = next.question_groups[groupIndex]
+      group.alternative = group.alternative
+        ? null
+        : { subparts: [{ label: '', marks: group.marks || 20 }] }
+      return next
+    })
+  }
+
+  const handleSaveBlueprint = async () => {
+    if (!editableBlueprint) return
+    setSavingTemplate(true)
+    try {
+      const response = await questionBankAPI.updatePaperTemplate(syllabusId, editableBlueprint)
+      setTemplateDoc(response.data)
+      setEditableBlueprint(cloneBlueprint(response.data.blueprint))
+      toast.success(response.data.validation?.is_valid ? 'Blueprint saved and validated' : 'Blueprint saved with issues to fix')
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to save blueprint')
+    } finally {
+      setSavingTemplate(false)
     }
   }
 
@@ -319,24 +429,156 @@ const QuestionBankPage = () => {
             {uploadingTemplate ? 'Uploading template...' : 'Upload Paper Template'}
           </Button>
 
-          {templateDoc && (
-            <div className="rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-2">
+          {templateDoc && editableBlueprint && (
+            <div className="rounded border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 space-y-4">
               <p className="font-semibold text-gray-900">{templateDoc.file_name}</p>
-              <p>
-                Title: {templateDoc.blueprint?.title || 'Examination'} | Questions:{' '}
-                {templateDoc.blueprint?.question_groups?.length || 0} | Total marks:{' '}
-                {templateDoc.blueprint?.total_marks || 0}
-              </p>
-              <div className="space-y-1">
-                {(templateDoc.blueprint?.question_groups || []).map((group) => (
-                  <p key={group.question_number}>
-                    Q{group.question_number} | {group.unit_hint || 'Unit unspecified'} | {group.marks} marks
-                    {group.alternative ? ' | OR pattern' : ''}
-                    {group.primary?.subparts?.length > 1 ? ` | ${group.primary.subparts.length} sub-parts` : ''}
-                    {group.primary?.subparts?.length > 0 ? ` | Primary: ${formatSubpartMarks(group.primary.subparts)}` : ''}
-                    {group.alternative?.subparts?.length > 0 ? ` | OR: ${formatSubpartMarks(group.alternative.subparts)}` : ''}
-                  </p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Input
+                  value={editableBlueprint.title || ''}
+                  onChange={(e) => handleBlueprintMetaChange('title', e.target.value)}
+                  placeholder="Exam title"
+                />
+                <Input
+                  type="number"
+                  value={editableBlueprint.total_marks || 0}
+                  onChange={(e) => handleBlueprintMetaChange('total_marks', e.target.value)}
+                  placeholder="Total marks"
+                />
+                <Input
+                  type="number"
+                  value={editableBlueprint.duration_minutes || 0}
+                  onChange={(e) => handleBlueprintMetaChange('duration_minutes', e.target.value)}
+                  placeholder="Duration (minutes)"
+                />
+              </div>
+
+              <div className={`rounded border p-3 ${templateDoc.validation?.is_valid ? 'border-green-300 bg-green-50 text-green-900' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+                <p className="font-semibold mb-2">
+                  {templateDoc.validation?.is_valid ? 'Blueprint validation passed' : 'Blueprint issues to fix before generation'}
+                </p>
+                {templateDoc.validation?.issues?.length > 0 ? (
+                  <ul className="list-disc list-inside space-y-1">
+                    {templateDoc.validation.issues.map((issue, idx) => (
+                      <li key={idx}>
+                        {issue.question_number ? `Q${issue.question_number}: ` : ''}
+                        {issue.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No structural issues detected.</p>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                {(editableBlueprint.question_groups || []).map((group, groupIndex) => (
+                  <div key={groupIndex} className="rounded border border-gray-300 bg-white p-3 space-y-3">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <Input
+                        type="number"
+                        value={group.question_number}
+                        onChange={(e) => handleGroupChange(groupIndex, 'question_number', e.target.value)}
+                      />
+                      <Input
+                        value={group.unit_hint || ''}
+                        onChange={(e) => handleGroupChange(groupIndex, 'unit_hint', e.target.value)}
+                        placeholder="Unit hint"
+                      />
+                      <Input
+                        type="number"
+                        value={group.marks || 0}
+                        onChange={(e) => handleGroupChange(groupIndex, 'marks', e.target.value)}
+                      />
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={!!group.or_with_next}
+                          onChange={(e) => handleGroupChange(groupIndex, 'or_with_next', e.target.checked)}
+                        />
+                        OR with next question
+                      </label>
+                      <Button size="sm" variant="outline" onClick={() => toggleAlternative(groupIndex)}>
+                        {group.alternative ? 'Remove Internal OR' : 'Add Internal OR'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => removeQuestionGroup(groupIndex)}>
+                        Remove Question
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="font-medium text-gray-900">Primary structure</p>
+                      {group.primary?.subparts?.map((subpart, subpartIndex) => (
+                        <div key={subpartIndex} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                          <Input
+                            value={subpart.label || ''}
+                            onChange={(e) => handleSubpartChange(groupIndex, 'primary', subpartIndex, 'label', e.target.value)}
+                            placeholder="Label"
+                          />
+                          <Input
+                            type="number"
+                            value={subpart.marks || 0}
+                            onChange={(e) => handleSubpartChange(groupIndex, 'primary', subpartIndex, 'marks', e.target.value)}
+                            placeholder="Marks"
+                          />
+                          <div className="md:col-span-2">
+                            <Button size="sm" variant="outline" onClick={() => removeSubpart(groupIndex, 'primary', subpartIndex)}>
+                              Remove Subpart
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      <Button size="sm" variant="outline" onClick={() => addSubpart(groupIndex, 'primary')}>
+                        Add Primary Subpart
+                      </Button>
+                    </div>
+
+                    {group.alternative && (
+                      <div className="space-y-2">
+                        <p className="font-medium text-gray-900">Internal OR structure</p>
+                        {group.alternative.subparts?.map((subpart, subpartIndex) => (
+                          <div key={subpartIndex} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                            <Input
+                              value={subpart.label || ''}
+                              onChange={(e) => handleSubpartChange(groupIndex, 'alternative', subpartIndex, 'label', e.target.value)}
+                              placeholder="Label"
+                            />
+                            <Input
+                              type="number"
+                              value={subpart.marks || 0}
+                              onChange={(e) => handleSubpartChange(groupIndex, 'alternative', subpartIndex, 'marks', e.target.value)}
+                              placeholder="Marks"
+                            />
+                            <div className="md:col-span-2">
+                              <Button size="sm" variant="outline" onClick={() => removeSubpart(groupIndex, 'alternative', subpartIndex)}>
+                                Remove OR Subpart
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        <Button size="sm" variant="outline" onClick={() => addSubpart(groupIndex, 'alternative')}>
+                          Add OR Subpart
+                        </Button>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-500">
+                      Summary: Q{group.question_number} | {group.unit_hint || 'Unit unspecified'} | {group.marks} marks
+                      {group.or_with_next ? ' | OR with next question' : ''}
+                      {!group.or_with_next && group.alternative ? ' | Internal OR pattern' : ''}
+                      {group.primary?.subparts?.length > 0 ? ` | Primary: ${formatSubpartMarks(group.primary.subparts)}` : ''}
+                      {group.alternative?.subparts?.length > 0 ? ` | OR: ${formatSubpartMarks(group.alternative.subparts)}` : ''}
+                    </p>
+                  </div>
                 ))}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button size="sm" variant="outline" onClick={addQuestionGroup}>
+                  Add Question Group
+                </Button>
+                <Button size="sm" onClick={handleSaveBlueprint} disabled={savingTemplate || !editableBlueprint}>
+                  {savingTemplate ? 'Saving blueprint...' : 'Save Blueprint Review'}
+                </Button>
               </div>
             </div>
           )}

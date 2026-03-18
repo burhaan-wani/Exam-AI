@@ -182,6 +182,7 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
                 model_answer="",
                 unit=unit_hint,
                 bank_id=str(primary_docs[0]["_id"]),
+                or_with_next=bool(group.get("or_with_next", False)),
             )
         )
 
