@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import html2pdf from 'html2pdf.js'
-import { Download, Pencil, Printer, RefreshCw, Save, Share2 } from 'lucide-react'
+import { Download, Pencil, RefreshCw, Save, Share2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { questionBankAPI } from '@/api/client'
 import Badge from '@/components/ui/Badge'
@@ -67,8 +67,6 @@ const QuestionPaperView = () => {
       setLoading(false)
     }
   }
-
-  const handlePrint = () => window.print()
 
   const handleDownloadPDF = async () => {
     if (!paper) return
@@ -236,11 +234,7 @@ const QuestionPaperView = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap gap-3 no-print">
-        <Button onClick={handlePrint}>
-          <Printer size={18} className="mr-2" />
-          Print
-        </Button>
+      <div className="flex flex-wrap gap-3 no-print" data-html2canvas-ignore="true">
         <Button onClick={handleDownloadPDF} variant="outline">
           <Download size={18} className="mr-2" />
           Download PDF
@@ -260,7 +254,10 @@ const QuestionPaperView = () => {
         )}
       </div>
 
-      <Card className={paper.status === 'finalized' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}>
+      <Card
+        className={paper.status === 'finalized' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}
+        data-html2canvas-ignore="true"
+      >
         <CardContent className="space-y-3 pt-6 text-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-gray-900">Final-Paper HITL</span>
@@ -273,7 +270,7 @@ const QuestionPaperView = () => {
         </CardContent>
       </Card>
 
-      <Card className="no-print">
+      <Card className="no-print" data-html2canvas-ignore="true">
         <CardContent className="space-y-3 pt-6">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Input
@@ -348,7 +345,10 @@ const QuestionPaperView = () => {
                 </div>
 
                 {isEditing ? (
-                  <div className="space-y-4 rounded border border-gray-200 bg-gray-50 p-4 print:hidden">
+                  <div
+                    className="space-y-4 rounded border border-gray-200 bg-gray-50 p-4 print:hidden"
+                    data-html2canvas-ignore="true"
+                  >
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                       <Input value={questionDraft.unit} onChange={(e) => updateDraft('unit', e.target.value)} placeholder="Unit" />
                       <Input value={questionDraft.topic} onChange={(e) => updateDraft('topic', e.target.value)} placeholder="Topic" />
@@ -461,15 +461,11 @@ const QuestionPaperView = () => {
                       </div>
                     ) : null}
 
-                    <div className="ml-6 border-l-2 border-gray-300 py-8 pl-4 text-sm text-gray-400">
-                      [Answer space for student]
-                    </div>
-
                     {question.or_with_next ? (
                       <div className="my-4 text-center text-lg font-semibold text-gray-700">(OR)</div>
                     ) : null}
 
-                    <div className="flex flex-wrap gap-2 print:hidden">
+                    <div className="flex flex-wrap gap-2 print:hidden" data-html2canvas-ignore="true">
                       <Button size="sm" variant="outline" onClick={() => startEditingQuestion(question)}>
                         <Pencil size={14} className="mr-2" />
                         Edit

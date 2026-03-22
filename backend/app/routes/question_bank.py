@@ -194,6 +194,7 @@ async def _replace_question_slot_from_bank(paper: dict, target: dict, slot: str)
     current_sub_questions = old_slot_sub_questions
     required_count = max(len(current_sub_questions), 1)
     used_bank_ids = _paper_used_bank_ids(paper.get("questions", []), exclude_number=target.get("question_number"))
+    used_bank_ids.update(bank_id for bank_id in old_slot_ids if bank_id)
     unit = target.get("unit", "")
     bloom_level = target.get("bloom_level", "")
 
