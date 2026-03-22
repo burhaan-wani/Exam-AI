@@ -232,6 +232,8 @@ const QuestionPaperView = () => {
     return <div className="py-8 text-center text-gray-500">Paper not found</div>
   }
 
+  const isFinalized = paper.status === 'finalized'
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-3 no-print" data-html2canvas-ignore="true">
@@ -239,34 +241,44 @@ const QuestionPaperView = () => {
           <Download size={18} className="mr-2" />
           Download PDF
         </Button>
-        <Button onClick={handleSharePaper} variant="outline">
+        <Button onClick={handleSharePaper} variant="outline" disabled={!isFinalized}>
           <Share2 size={18} className="mr-2" />
-          Share with Students
+          Copy Student Link
         </Button>
-        {paper.status === 'finalized' ? (
+        {isFinalized ? (
           <Button variant="outline" onClick={() => handleFinalize('draft')} disabled={busyAction === 'draft'}>
-            {busyAction === 'draft' ? 'Updating...' : 'Reopen Draft'}
+            {busyAction === 'draft' ? 'Updating...' : 'Move Back to Draft'}
           </Button>
         ) : (
           <Button onClick={() => handleFinalize('finalized')} disabled={busyAction === 'finalized'}>
-            {busyAction === 'finalized' ? 'Finalizing...' : 'Finalize Paper'}
+            {busyAction === 'finalized' ? 'Finalizing...' : 'Approve Final Paper'}
           </Button>
         )}
       </div>
 
       <Card
-        className={paper.status === 'finalized' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}
+        className={isFinalized ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}
         data-html2canvas-ignore="true"
       >
         <CardContent className="space-y-3 pt-6 text-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-gray-900">Final-Paper HITL</span>
-            <Badge variant={paper.status === 'finalized' ? 'default' : 'secondary'}>{paper.status}</Badge>
+            <Badge variant={isFinalized ? 'default' : 'secondary'}>{paper.status}</Badge>
             {paper.finalized_at ? <span className="text-gray-600">Published {new Date(paper.finalized_at).toLocaleString()}</span> : null}
           </div>
           <p className="text-gray-700">
-            Edit wording, subparts, marks, OR behavior, or replace a question from the curated bank. Students can access the paper only after finalization.
+            {isFinalized
+              ? 'This paper is approved. You can copy the student link to share it, or move it back to draft if you need more edits.'
+              : 'This paper is still in teacher review. Edit wording, subparts, marks, OR behavior, or replace questions before approving the final paper.'}
           </p>
+          <div className="rounded border border-white/70 bg-white/70 p-3 text-xs text-gray-700">
+            <p>
+              <span className="font-semibold text-gray-900">Approve Final Paper:</span> locks this draft in as the official paper version.
+            </p>
+            <p className="mt-1">
+              <span className="font-semibold text-gray-900">Copy Student Link:</span> copies the student-facing access link after the paper has been approved.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
