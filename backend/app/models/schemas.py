@@ -23,6 +23,11 @@ class QuestionReviewStatus(str, Enum):
     EDITED = "edited"
 
 
+class FinalPaperStatus(str, Enum):
+    DRAFT = "draft"
+    FINALIZED = "finalized"
+
+
 class UserCreate(BaseModel):
     name: str
     email: str
@@ -75,18 +80,22 @@ class SubQuestion(BaseModel):
     text: str
     marks: int = 0
     model_answer: str = ""
+    bank_id: str = ""
 
 
 class PaperQuestion(BaseModel):
     question_number: int
     question_text: str
     sub_questions: list[SubQuestion] = []
+    alternative_question_text: str = ""
+    alternative_sub_questions: list[SubQuestion] = []
     marks: int
     bloom_level: str
     topic: str
     model_answer: str = ""
     unit: str = ""
     bank_id: str = ""
+    source_bank_ids: list[str] = []
     or_with_next: bool = False
 
 
@@ -97,6 +106,8 @@ class FinalPaperOut(BaseModel):
     total_marks: int
     duration_minutes: int
     questions: list[PaperQuestion]
+    status: FinalPaperStatus = FinalPaperStatus.DRAFT
+    finalized_at: str | None = None
     created_at: str
 
 
@@ -241,3 +252,29 @@ class PaperTemplateUpdateRequest(BaseModel):
 
 class TemplatePaperGenerationRequest(BaseModel):
     syllabus_id: str
+
+
+class FinalPaperMetadataUpdateRequest(BaseModel):
+    exam_title: str | None = None
+    total_marks: int | None = None
+    duration_minutes: int | None = None
+
+
+class FinalPaperQuestionUpdateRequest(BaseModel):
+    question_text: str | None = None
+    sub_questions: list[SubQuestion] | None = None
+    alternative_question_text: str | None = None
+    alternative_sub_questions: list[SubQuestion] | None = None
+    marks: int | None = None
+    bloom_level: str | None = None
+    topic: str | None = None
+    unit: str | None = None
+    or_with_next: bool | None = None
+
+
+class FinalPaperFinalizeRequest(BaseModel):
+    status: FinalPaperStatus = FinalPaperStatus.FINALIZED
+
+
+class FinalPaperQuestionReplaceRequest(BaseModel):
+    slot: str = "primary"

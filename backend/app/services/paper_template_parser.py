@@ -4,11 +4,9 @@ import logging
 import os
 import re
 
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from openai import OpenAI
 
-from app.config import get_settings
+from app.config import get_settings, get_text_model, get_vision_model
 from app.models.schemas import (
     PaperTemplateBlueprint,
     PaperTemplateValidationIssue,
@@ -19,21 +17,14 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-def _get_chat_model() -> ChatOpenAI:
+def _get_openai_client() -> tuple[OpenAI, str]:
     os.environ["OPENAI_API_KEY"] = settings.openrouter_api_key
     os.environ["OPENAI_BASE_URL"] = "https://openrouter.ai/api/v1"
-    return ChatOpenAI(model=settings.openrouter_model, temperature=0.1)
+    model_name = get_vision_model(settings)
+    return OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key), model_name
 
 
-TEMPLATE_BLUEPRINT_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You are an academic exam-template analyst. Extract only structure from the paper and return ONLY valid JSON.",
-        ),
-        (
-            "human",
-            """Analyze the following exam paper template and extract its structural blueprint.
+TEXT_TEMPLATE_ANALYST_INSTRUCTIONS = """Analyze the following exam paper template and extract its structural blueprint.
 
 Known syllabus units:
 {unit_names}
@@ -81,10 +72,7 @@ Return ONLY valid JSON in this exact format:
 
 Template text:
 {template_text}
-""",
-        ),
-    ]
-)
+"""
 
 
 PAGE_TEMPLATE_ANALYST_INSTRUCTIONS = """Analyze this single exam paper page and extract only the numbered question groups visible on this page.
@@ -184,6 +172,18 @@ def _clean_json_content(raw: str) -> str:
         content = content.split("\n", 1)[1]
         content = content.rsplit("```", 1)[0]
     return content
+
+
+def _parse_json_payload(raw: str) -> dict:
+    content = _clean_json_content(raw)
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        start = content.find("{")
+        end = content.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return json.loads(content[start:end + 1])
+        raise
 
 
 def _extract_question_number(group: dict, fallback_number: int) -> int:
@@ -373,51 +373,80 @@ def validate_paper_template_blueprint(blueprint: PaperTemplateBlueprint) -> Pape
 
 
 def _validate_blueprint(raw: str) -> PaperTemplateBlueprint:
-    data = json.loads(_clean_json_content(raw))
+    data = _parse_json_payload(raw)
     return _validate_blueprint_data(data)
 
 
-async def _parse_from_text(llm: ChatOpenAI, template_text: str, unit_names: list[str]) -> PaperTemplateBlueprint:
-    messages = TEMPLATE_BLUEPRINT_PROMPT.format_messages(
-        unit_names="\n".join(f"- {unit}" for unit in unit_names) or "- Unknown",
-        template_text=template_text[:20000],
-    )
+async def _run_structured_completion(messages: list[dict]) -> str:
+    client, model_name = _get_openai_client()
 
     def _run() -> str:
-        response = llm.invoke(messages)
-        return response.content or ""
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            temperature=0.1,
+        )
+        return response.choices[0].message.content or ""
+
+    return await asyncio.to_thread(_run)
+
+
+async def _parse_from_text(template_text: str, unit_names: list[str]) -> PaperTemplateBlueprint:
+    client = OpenAI(base_url="https://openrouter.ai/api/v1", api_key=settings.openrouter_api_key)
+    model_name = get_text_model(settings)
+
+    def _run() -> str:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "You are an academic exam-template analyst. "
+                        "Extract only structure from the paper and return only valid JSON.\n\n"
+                        + TEXT_TEMPLATE_ANALYST_INSTRUCTIONS.format(
+                            unit_names="\n".join(f"- {unit}" for unit in unit_names) or "- Unknown",
+                            template_text=template_text[:20000],
+                        )
+                    ),
+                },
+            ],
+            temperature=0.1,
+        )
+        return response.choices[0].message.content or ""
 
     raw = await asyncio.to_thread(_run)
     return _validate_blueprint(raw)
 
 
-async def _analyze_single_page(llm: ChatOpenAI, page_number: int, image_url: str, unit_names: list[str]) -> dict:
-    content: list[dict] = [
-        {
-            "type": "text",
-            "text": PAGE_TEMPLATE_ANALYST_INSTRUCTIONS.format(
-                unit_names="\n".join(f"- {unit}" for unit in unit_names) or "- Unknown",
-            ),
-        },
-        {
-            "type": "image_url",
-            "image_url": {"url": image_url},
-        },
-    ]
-    messages = [
-        SystemMessage(content=f"You are analyzing page {page_number} of an exam paper template. Return only valid JSON."),
-        HumanMessage(content=content),
-    ]
+async def _analyze_single_page(page_number: int, image_url: str, unit_names: list[str]) -> dict:
+    raw = await _run_structured_completion(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"You are analyzing page {page_number} of an exam paper template. "
+                            "Return only valid JSON.\n\n"
+                            + PAGE_TEMPLATE_ANALYST_INSTRUCTIONS.format(
+                                unit_names="\n".join(f"- {unit}" for unit in unit_names) or "- Unknown",
+                            )
+                        ),
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_url},
+                    },
+                ],
+            },
+        ]
+    )
+    return _parse_json_payload(raw)
 
-    def _run() -> str:
-        response = llm.invoke(messages)
-        return response.content or ""
 
-    raw = await asyncio.to_thread(_run)
-    return json.loads(_clean_json_content(raw))
-
-
-async def _analyze_all_pages(llm: ChatOpenAI, page_images: list[str], unit_names: list[str]) -> dict:
+async def _analyze_all_pages(page_images: list[str], unit_names: list[str]) -> dict:
     content: list[dict] = [
         {
             "type": "text",
@@ -434,32 +463,35 @@ async def _analyze_all_pages(llm: ChatOpenAI, page_images: list[str], unit_names
             }
         )
 
-    messages = [
-        SystemMessage(content="You are analyzing a multi-page exam paper template. Return only valid JSON."),
-        HumanMessage(content=content),
-    ]
+    raw = await _run_structured_completion(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "You are analyzing a multi-page exam paper template. Return only valid JSON.",
+                    },
+                    *content,
+                ],
+            },
+        ]
+    )
+    return _parse_json_payload(raw)
 
-    def _run() -> str:
-        response = llm.invoke(messages)
-        return response.content or ""
 
-    raw = await asyncio.to_thread(_run)
-    return json.loads(_clean_json_content(raw))
-
-
-async def _parse_from_images(llm: ChatOpenAI, page_images: list[str], unit_names: list[str]) -> PaperTemplateBlueprint:
+async def _parse_from_images(page_images: list[str], unit_names: list[str]) -> PaperTemplateBlueprint:
     if not page_images:
         raise ValueError("The uploaded template did not contain any recognizable question groups.")
 
     page_results: list[dict] = []
+    page_errors: list[str] = []
     for page_number, image_url in enumerate(page_images, start=1):
         try:
-            page_results.append(await _analyze_single_page(llm, page_number, image_url, unit_names))
+            page_results.append(await _analyze_single_page(page_number, image_url, unit_names))
         except Exception as error:
             logger.error("Vision template parsing failed for page %d: %s", page_number, error)
-            raise ValueError(
-                f"Could not analyze page {page_number} of the scanned template. The current model may not support page-image understanding well enough."
-            )
+            page_errors.append(f"page {page_number}: {error}")
 
     merged_groups: list[dict] = []
     title = ""
@@ -477,7 +509,7 @@ async def _parse_from_images(llm: ChatOpenAI, page_images: list[str], unit_names
 
     if not merged_groups:
         try:
-            combined_result = await _analyze_all_pages(llm, page_images, unit_names)
+            combined_result = await _analyze_all_pages(page_images, unit_names)
             merged_groups = combined_result.get("question_groups", []) or []
             if combined_result.get("title"):
                 title = str(combined_result.get("title") or "").strip()
@@ -487,6 +519,12 @@ async def _parse_from_images(llm: ChatOpenAI, page_images: list[str], unit_names
                 duration_minutes = int(combined_result.get("duration_minutes", 0) or 0)
         except Exception as error:
             logger.error("Combined vision template parsing failed: %s", error)
+            if page_errors:
+                logger.error("Per-page template parsing errors: %s", "; ".join(page_errors))
+            raise ValueError(
+                "Could not analyze the scanned template images into a usable paper structure. "
+                "Try a clearer PDF, a text-based PDF, or a stronger vision-capable model."
+            )
 
     return _validate_blueprint_data(
         {
@@ -503,20 +541,19 @@ async def parse_paper_template_blueprint(
     unit_names: list[str],
     page_images: list[str] | None = None,
 ) -> PaperTemplateBlueprint:
-    llm = _get_chat_model()
     normalized_text = (template_text or "").strip()
 
     if normalized_text and len(normalized_text) >= 120:
         try:
-            return await _parse_from_text(llm, normalized_text, unit_names)
+            return await _parse_from_text(normalized_text, unit_names)
         except ValueError:
             if not page_images:
                 raise
 
     if page_images:
-        return await _parse_from_images(llm, page_images, unit_names)
+        return await _parse_from_images(page_images, unit_names)
 
     if normalized_text:
-        return await _parse_from_text(llm, normalized_text, unit_names)
+        return await _parse_from_text(normalized_text, unit_names)
 
     raise ValueError("Could not extract readable text from the uploaded template. Try a clearer PDF or image-based OCR path.")

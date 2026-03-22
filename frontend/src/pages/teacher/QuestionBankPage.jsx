@@ -32,7 +32,7 @@ const QuestionBankPage = () => {
   const [uploadingRef, setUploadingRef] = useState(false)
   const [refFile, setRefFile] = useState(null)
   const [refDocs, setRefDocs] = useState([])
-  const [templateFile, setTemplateFile] = useState(null)
+  const [templateFiles, setTemplateFiles] = useState([])
   const [templateDoc, setTemplateDoc] = useState(null)
   const [uploadingTemplate, setUploadingTemplate] = useState(false)
   const [savingTemplate, setSavingTemplate] = useState(false)
@@ -151,17 +151,17 @@ const QuestionBankPage = () => {
   }
 
   const handleUploadTemplate = async () => {
-    if (!templateFile) {
-      toast.error('Please select a previous paper template')
+    if (templateFiles.length === 0) {
+      toast.error('Please select one or more template files')
       return
     }
 
     setUploadingTemplate(true)
     try {
-      const response = await questionBankAPI.uploadPaperTemplate(syllabusId, templateFile)
+      const response = await questionBankAPI.uploadPaperTemplate(syllabusId, templateFiles)
       setTemplateDoc(response.data)
       setEditableBlueprint(cloneBlueprint(response.data.blueprint))
-      setTemplateFile(null)
+      setTemplateFiles([])
       toast.success('Paper template uploaded and blueprint extracted!')
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to upload paper template')
@@ -422,10 +422,16 @@ const QuestionBankPage = () => {
         <CardContent className="space-y-3">
           <Input
             type="file"
-            accept=".pdf,.docx,.doc,.txt"
-            onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+            accept=".pdf,.docx,.doc,.txt,.png,.jpg,.jpeg,.webp"
+            multiple
+            onChange={(e) => setTemplateFiles(Array.from(e.target.files || []))}
           />
-          <Button onClick={handleUploadTemplate} disabled={uploadingTemplate || !templateFile}>
+          {templateFiles.length > 0 && (
+            <p className="text-sm text-gray-600">
+              {templateFiles.length} template file{templateFiles.length > 1 ? 's' : ''} selected
+            </p>
+          )}
+          <Button onClick={handleUploadTemplate} disabled={uploadingTemplate || templateFiles.length === 0}>
             {uploadingTemplate ? 'Uploading template...' : 'Upload Paper Template'}
           </Button>
 

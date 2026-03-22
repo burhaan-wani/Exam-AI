@@ -9,7 +9,7 @@ from bson import ObjectId
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-from app.config import get_settings
+from app.config import get_settings, get_text_model
 from app.database import question_bank_collection, syllabus_collection
 from app.models.schemas import BloomLevel, QuestionBankItem, QuestionReviewStatus
 from app.services.rag_retriever import build_retriever_for_syllabus
@@ -26,7 +26,8 @@ _BLOOM_CONFIG = {
 def _get_chat_model() -> ChatOpenAI:
     os.environ["OPENAI_API_KEY"] = settings.openrouter_api_key
     os.environ["OPENAI_BASE_URL"] = "https://openrouter.ai/api/v1"
-    return ChatOpenAI(model=settings.openrouter_model, temperature=0.3)
+    model_name = get_text_model(settings)
+    return ChatOpenAI(model=model_name, temperature=0.3)
 
 
 def _format_question_bank_item(doc: dict) -> QuestionBankItem:
@@ -248,5 +249,11 @@ async def generate_question_bank_for_syllabus(syllabus_id: str) -> List[Question
             question_items.append(_format_question_bank_item(doc))
 
         logger.info("Generated %d questions for unit '%s'", len(questions), unit_name)
+
+    if not question_items:
+        raise ValueError(
+            "Question bank generation did not return any valid text questions. "
+            "Check that OPENROUTER_MODEL is a chat-completions model that can return JSON."
+        )
 
     return question_items

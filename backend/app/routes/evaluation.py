@@ -11,7 +11,7 @@ from app.database import (
     syllabus_collection,
 )
 from app.dependencies.auth import require_student, require_teacher
-from app.models.schemas import EvaluateRequest, StudentAnswerSubmit
+from app.models.schemas import EvaluateRequest, FinalPaperStatus, StudentAnswerSubmit
 from app.services.answer_evaluator import evaluate_student_submission, format_eval_out
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,9 @@ async def submit_student_answers(
     current_user: dict = Depends(require_student),
 ):
     """Submit student answers for a question paper."""
-    await _get_paper_or_404(body.paper_id)
+    paper = await _get_paper_or_404(body.paper_id)
+    if paper.get("status") != FinalPaperStatus.FINALIZED.value:
+        raise HTTPException(403, "This paper is not yet open for student submissions")
 
     try:
         doc = {

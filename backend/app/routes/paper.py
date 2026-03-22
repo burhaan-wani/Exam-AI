@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.database import final_question_paper_collection
 from app.dependencies.auth import require_student
+from app.models.schemas import FinalPaperStatus
 
 router = APIRouter()
 
@@ -17,6 +18,8 @@ async def get_paper(paper_id: str, _current_user: dict = Depends(require_student
 
     if not doc:
         raise HTTPException(404, "Question paper not found")
+    if doc.get("status") != FinalPaperStatus.FINALIZED.value:
+        raise HTTPException(403, "Question paper has not been finalized for student access yet")
 
     return {
         "id": str(doc["_id"]),
@@ -25,5 +28,7 @@ async def get_paper(paper_id: str, _current_user: dict = Depends(require_student
         "total_marks": doc.get("total_marks", 0),
         "duration_minutes": doc.get("duration_minutes", 180),
         "questions": doc.get("questions", []),
+        "status": doc.get("status", FinalPaperStatus.DRAFT.value),
+        "finalized_at": doc.get("finalized_at"),
         "created_at": doc.get("created_at", ""),
     }

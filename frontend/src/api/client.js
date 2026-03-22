@@ -64,10 +64,12 @@ export const questionBankAPI = {
   listReferenceMaterial: (syllabusId) =>
     apiClient.get('/reference-material', { params: { syllabus_id: syllabusId } }),
 
-  uploadPaperTemplate: (syllabusId, file) => {
+  uploadPaperTemplate: (syllabusId, files) => {
     const formData = new FormData()
     formData.append('syllabus_id', syllabusId)
-    formData.append('file', file)
+    for (const file of files) {
+      formData.append('files', file)
+    }
     return apiClient.post('/upload-paper-template', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
@@ -110,6 +112,18 @@ export const questionBankAPI = {
 
   getFinalPaper: (paperId) =>
     apiClient.get('/final-paper', { params: { paper_id: paperId } }),
+
+  updateFinalPaper: (paperId, data) =>
+    apiClient.patch(`/final-paper/${paperId}`, data),
+
+  updateFinalPaperQuestion: (paperId, questionNumber, data) =>
+    apiClient.patch(`/final-paper/${paperId}/questions/${questionNumber}`, data),
+
+  replaceFinalPaperQuestion: (paperId, questionNumber, slot = 'primary') =>
+    apiClient.post(`/final-paper/${paperId}/questions/${questionNumber}/replace`, { slot }),
+
+  finalizeFinalPaper: (paperId, status = 'finalized') =>
+    apiClient.post(`/final-paper/${paperId}/finalize`, { status }),
 }
 
 export default apiClient

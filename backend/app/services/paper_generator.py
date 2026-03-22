@@ -10,9 +10,9 @@ from bson import ObjectId
 from langchain.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
-from app.config import get_settings
+from app.config import get_settings, get_text_model
 from app.database import question_bank_collection, final_question_paper_collection, paper_templates_collection, syllabus_collection
-from app.models.schemas import PaperQuestion, QuestionPaperTemplate, QuestionReviewStatus
+from app.models.schemas import FinalPaperStatus, PaperQuestion, QuestionPaperTemplate, QuestionReviewStatus, SubQuestion
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -27,7 +27,8 @@ _CURATED_STATUSES = {QuestionReviewStatus.APPROVED.value, QuestionReviewStatus.E
 def _get_chat_model() -> ChatOpenAI:
     os.environ["OPENAI_API_KEY"] = settings.openrouter_api_key
     os.environ["OPENAI_BASE_URL"] = "https://openrouter.ai/api/v1"
-    return ChatOpenAI(model=settings.openrouter_model, temperature=0.2)
+    model_name = get_text_model(settings)
+    return ChatOpenAI(model=model_name, temperature=0.2)
 
 
 def _resolve_question_marks(doc: dict) -> int:
@@ -86,21 +87,28 @@ def _select_bank_docs(bank_docs: list[dict], used_ids: set[str], unit_hint: str,
     return candidates[:count]
 
 
-def _format_slot_option(selected_docs: list[dict], subparts: list[dict]) -> str:
+def _build_slot_content(selected_docs: list[dict], subparts: list[dict]) -> tuple[str, list[SubQuestion]]:
     if not subparts:
-        return selected_docs[0].get("question", "")
+        doc = selected_docs[0]
+        return doc.get("question", ""), []
 
-    lines: list[str] = []
+    if len(subparts) == 1 and not (subparts[0].get("label") or "").strip():
+        doc = selected_docs[0]
+        return doc.get("question", ""), []
+
+    items: list[SubQuestion] = []
     for index, subpart in enumerate(subparts):
         doc = selected_docs[min(index, len(selected_docs) - 1)]
-        label = (subpart.get("label") or "").strip()
-        marks = int(subpart.get("marks", 0) or 0)
-        prefix = f"{label}) " if label else ""
-        line = f"{prefix}{doc.get('question', '')}"
-        if marks > 0:
-            line = f"{line} ({marks} marks)"
-        lines.append(line)
-    return "\n".join(lines)
+        items.append(
+            SubQuestion(
+                label=(subpart.get("label") or "").strip(),
+                text=doc.get("question", ""),
+                marks=int(subpart.get("marks", 0) or 0),
+                model_answer=doc.get("model_answer", ""),
+                bank_id=str(doc.get("_id", "")),
+            )
+        )
+    return "", items
 
 
 def _derive_slot_bloom_level(selected_docs: list[dict]) -> str:
@@ -151,7 +159,9 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
         for doc in primary_docs:
             used_ids.add(str(doc["_id"]))
 
-        question_text = _format_slot_option(primary_docs, subparts)
+        question_text, sub_questions = _build_slot_content(primary_docs, subparts)
+        alternative_question_text = ""
+        alternative_sub_questions: list[SubQuestion] = []
         all_docs = list(primary_docs)
 
         if alternative:
@@ -164,7 +174,7 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
             )
             for doc in alternative_docs:
                 used_ids.add(str(doc["_id"]))
-            question_text = f"{question_text}\n\n(OR)\n\n{_format_slot_option(alternative_docs, alternative_subparts)}"
+            alternative_question_text, alternative_sub_questions = _build_slot_content(alternative_docs, alternative_subparts)
             all_docs.extend(alternative_docs)
 
         question_number = int(group.get("question_number", len(questions) + 1))
@@ -175,13 +185,16 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
             PaperQuestion(
                 question_number=question_number,
                 question_text=question_text,
-                sub_questions=[],
+                sub_questions=sub_questions,
+                alternative_question_text=alternative_question_text,
+                alternative_sub_questions=alternative_sub_questions,
                 marks=int(group.get("marks", 20) or 20),
                 bloom_level=_derive_slot_bloom_level(all_docs),
                 topic=topics,
                 model_answer="",
                 unit=unit_hint,
                 bank_id=str(primary_docs[0]["_id"]),
+                source_bank_ids=[str(doc["_id"]) for doc in all_docs],
                 or_with_next=bool(group.get("or_with_next", False)),
             )
         )
@@ -195,6 +208,8 @@ async def generate_paper_from_uploaded_template(syllabus_id: str) -> dict:
         "total_marks": total_marks,
         "duration_minutes": duration_minutes,
         "questions": [q.model_dump() for q in questions],
+        "status": FinalPaperStatus.DRAFT.value,
+        "finalized_at": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "template_id": str(template_doc["_id"]),
     }
@@ -312,12 +327,15 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
                 question_number=q_number,
                 question_text=src.get("question", ""),
                 sub_questions=[],
+                alternative_question_text="",
+                alternative_sub_questions=[],
                 marks=marks,
                 bloom_level=src.get("bloom_level", ""),
                 topic=src.get("topic", ""),
                 model_answer="",
                 unit=src.get("unit", ""),
                 bank_id=qid,
+                source_bank_ids=[qid],
             )
             questions.append(pq)
             total_marks += marks
@@ -329,6 +347,8 @@ async def generate_paper_from_question_bank(template: QuestionPaperTemplate) -> 
         "total_marks": total_marks,
         "duration_minutes": 180,
         "questions": [q.model_dump() for q in questions],
+        "status": FinalPaperStatus.DRAFT.value,
+        "finalized_at": None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 

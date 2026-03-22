@@ -13,6 +13,11 @@ from app.database import (
 )
 from app.dependencies.auth import require_teacher
 from app.models.schemas import (
+    FinalPaperFinalizeRequest,
+    FinalPaperOut,
+    FinalPaperQuestionReplaceRequest,
+    FinalPaperQuestionUpdateRequest,
+    FinalPaperMetadataUpdateRequest,
     QuestionBankItem,
     QuestionBankCreateRequest,
     QuestionBankUpdateRequest,
@@ -22,6 +27,7 @@ from app.models.schemas import (
     QuestionPaperTemplate,
     QuestionReviewStatus,
     TemplatePaperGenerationRequest,
+    FinalPaperStatus,
 )
 from app.services.document_loader import build_langchain_documents, mark_reference_document_indexed, save_reference_document
 from app.services.paper_generator import generate_paper_from_question_bank, generate_paper_from_uploaded_template
@@ -106,6 +112,150 @@ def _build_template_response(doc: dict) -> PaperTemplateOut:
         blueprint=blueprint,
         validation=validation,
     )
+
+
+def _build_final_paper_response(doc: dict) -> FinalPaperOut:
+    return FinalPaperOut(
+        id=str(doc["_id"]),
+        syllabus_id=doc.get("syllabus_id", ""),
+        exam_title=doc.get("exam_title", ""),
+        total_marks=doc.get("total_marks", 0),
+        duration_minutes=doc.get("duration_minutes", 180),
+        questions=doc.get("questions", []),
+        status=doc.get("status", FinalPaperStatus.DRAFT.value),
+        finalized_at=doc.get("finalized_at"),
+        created_at=doc.get("created_at", ""),
+    )
+
+
+def _touch_paper(doc: dict) -> dict:
+    updated_at = datetime.now(timezone.utc).isoformat()
+    doc["updated_at"] = updated_at
+    return {"updated_at": updated_at}
+
+
+def _question_has_internal_or(question: dict) -> bool:
+    return bool(question.get("alternative_question_text") or question.get("alternative_sub_questions"))
+
+
+def _question_bank_ids(question: dict) -> set[str]:
+    ids = set(question.get("source_bank_ids", []) or [])
+    if question.get("bank_id"):
+        ids.add(question["bank_id"])
+    for sub in question.get("sub_questions", []) or []:
+        if sub.get("bank_id"):
+            ids.add(sub["bank_id"])
+    for sub in question.get("alternative_sub_questions", []) or []:
+        if sub.get("bank_id"):
+            ids.add(sub["bank_id"])
+    return ids
+
+
+def _paper_used_bank_ids(questions: list[dict], exclude_number: int | None = None) -> set[str]:
+    used_ids: set[str] = set()
+    for question in questions:
+        if exclude_number is not None and question.get("question_number") == exclude_number:
+            continue
+        used_ids.update(_question_bank_ids(question))
+    return used_ids
+
+
+def _slot_shape(question: dict, slot: str) -> tuple[str, list[dict]]:
+    if slot == "alternative":
+        return question.get("alternative_question_text", ""), question.get("alternative_sub_questions", []) or []
+    return question.get("question_text", ""), question.get("sub_questions", []) or []
+
+
+def _apply_slot_content(question: dict, slot: str, text: str, sub_questions: list[dict]) -> None:
+    if slot == "alternative":
+        question["alternative_question_text"] = text
+        question["alternative_sub_questions"] = sub_questions
+        return
+    question["question_text"] = text
+    question["sub_questions"] = sub_questions
+
+
+async def _replace_question_slot_from_bank(paper: dict, target: dict, slot: str) -> dict:
+    if slot not in {"primary", "alternative"}:
+        raise HTTPException(400, "slot must be either 'primary' or 'alternative'")
+
+    if slot == "alternative" and not _question_has_internal_or(target):
+        raise HTTPException(400, "This question does not have an internal OR option to replace")
+
+    _, old_slot_sub_questions = _slot_shape(target, slot)
+    old_slot_ids = set()
+    if slot == "primary":
+        if target.get("bank_id"):
+            old_slot_ids.add(target["bank_id"])
+        old_slot_ids.update(sub.get("bank_id") for sub in old_slot_sub_questions if sub.get("bank_id"))
+    else:
+        old_slot_ids.update(sub.get("bank_id") for sub in old_slot_sub_questions if sub.get("bank_id"))
+
+    current_sub_questions = old_slot_sub_questions
+    required_count = max(len(current_sub_questions), 1)
+    used_bank_ids = _paper_used_bank_ids(paper.get("questions", []), exclude_number=target.get("question_number"))
+    unit = target.get("unit", "")
+    bloom_level = target.get("bloom_level", "")
+
+    query: dict = {"syllabus_id": paper.get("syllabus_id", "")}
+    if unit:
+        query["unit"] = unit
+    if bloom_level and bloom_level != "Mixed":
+        query["bloom_level"] = bloom_level
+
+    cursor = question_bank_collection.find(query)
+    candidates = [
+        d async for d in cursor
+        if str(d["_id"]) not in used_bank_ids and d.get("status", QuestionReviewStatus.PENDING.value) in _CURATED_STATUSES
+    ]
+    if len(candidates) < required_count:
+        raise HTTPException(400, "No suitable replacement questions available while preserving the current paper constraints")
+
+    selected = candidates[:required_count]
+    slot_bank_ids = [str(doc["_id"]) for doc in selected]
+
+    if current_sub_questions:
+        replacement_sub_questions = []
+        for index, sub_question in enumerate(current_sub_questions):
+            doc = selected[min(index, len(selected) - 1)]
+            replacement_sub_questions.append(
+                {
+                    "label": sub_question.get("label", ""),
+                    "text": doc.get("question", ""),
+                    "marks": int(sub_question.get("marks", 0) or 0),
+                    "model_answer": doc.get("model_answer", ""),
+                    "bank_id": str(doc["_id"]),
+                }
+            )
+        _apply_slot_content(target, slot, "", replacement_sub_questions)
+    else:
+        doc = selected[0]
+        _apply_slot_content(target, slot, doc.get("question", ""), [])
+        if slot == "primary":
+            target["bank_id"] = str(doc["_id"])
+
+    current_source_ids = set(target.get("source_bank_ids", []) or [])
+    current_source_ids.difference_update(old_slot_ids)
+    current_source_ids.update(slot_bank_ids)
+    target["source_bank_ids"] = list(current_source_ids)
+
+    slot_topics = [doc.get("topic", "") for doc in selected if doc.get("topic")]
+    if slot_topics:
+        combined_topics = [part.strip() for part in (target.get("topic", "") or "").split(",") if part.strip()]
+        combined_topics.extend(slot_topics)
+        target["topic"] = ", ".join(dict.fromkeys(combined_topics))
+
+    if slot == "primary":
+        representative = selected[0]
+        target["bank_id"] = str(representative["_id"])
+        target["bloom_level"] = representative.get("bloom_level", target.get("bloom_level", ""))
+        target["unit"] = representative.get("unit", target.get("unit", ""))
+        if not current_sub_questions:
+            target["marks"] = int(representative.get("marks", 0) or 0) or _fallback_marks_for_bloom(
+                representative.get("bloom_level", target.get("bloom_level", ""))
+            )
+
+    return target
 
 
 @router.post("/upload-syllabus")
@@ -255,30 +405,35 @@ async def generate_question_paper(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return {
-        "id": str(paper_doc["_id"]),
-        "syllabus_id": paper_doc.get("syllabus_id", ""),
-        "exam_title": paper_doc.get("exam_title", ""),
-        "total_marks": paper_doc.get("total_marks", 0),
-        "duration_minutes": paper_doc.get("duration_minutes", 180),
-        "questions": paper_doc.get("questions", []),
-        "created_at": paper_doc.get("created_at", ""),
-    }
+    return _build_final_paper_response(paper_doc)
 
 
 @router.post("/upload-paper-template", response_model=PaperTemplateOut)
 async def upload_paper_template(
     syllabus_id: str = Form(...),
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     current_user: dict = Depends(require_teacher),
 ):
-    """Upload a previous paper template and extract its structural blueprint."""
+    """Upload one or more previous paper template files and extract a combined structural blueprint."""
     syllabus = await _get_owned_syllabus_or_404(syllabus_id, current_user["id"])
-    file_bytes = await file.read()
-    filename = file.filename or "paper-template"
+    if not files:
+        raise HTTPException(400, "Upload at least one template file.")
+
+    raw_text_parts: list[str] = []
+    page_images: list[str] = []
+    uploaded_names: list[str] = []
 
     try:
-        raw_text, page_images = extract_template_source(file_bytes, filename)
+        for file in files:
+            file_bytes = await file.read()
+            filename = file.filename or "paper-template"
+            uploaded_names.append(filename)
+            extracted_text, extracted_images = extract_template_source(file_bytes, filename)
+            if extracted_text.strip():
+                raw_text_parts.append(extracted_text.strip())
+            page_images.extend(extracted_images)
+
+        raw_text = "\n\n".join(raw_text_parts)
         unit_names = [topic.get("unit", "") for topic in syllabus.get("topics", []) if topic.get("unit")]
         blueprint = await parse_paper_template_blueprint(raw_text, unit_names, page_images=page_images)
     except ValueError as e:
@@ -286,9 +441,10 @@ async def upload_paper_template(
 
     uploaded_at = datetime.now(timezone.utc).isoformat()
     await paper_templates_collection.delete_many({"syllabus_id": syllabus_id})
+    combined_name = uploaded_names[0] if len(uploaded_names) == 1 else f"{uploaded_names[0]} (+{len(uploaded_names) - 1} more)"
     doc = {
         "syllabus_id": syllabus_id,
-        "file_name": filename,
+        "file_name": combined_name,
         "raw_text": raw_text,
         "blueprint": blueprint.model_dump(),
         "uploaded_at": uploaded_at,
@@ -355,15 +511,7 @@ async def generate_question_paper_from_template(
     except ValueError as e:
         raise HTTPException(400, str(e))
 
-    return {
-        "id": str(paper_doc["_id"]),
-        "syllabus_id": paper_doc.get("syllabus_id", ""),
-        "exam_title": paper_doc.get("exam_title", ""),
-        "total_marks": paper_doc.get("total_marks", 0),
-        "duration_minutes": paper_doc.get("duration_minutes", 180),
-        "questions": paper_doc.get("questions", []),
-        "created_at": paper_doc.get("created_at", ""),
-    }
+    return _build_final_paper_response(paper_doc)
 
 
 @router.post("/upload-reference-material")
@@ -439,7 +587,7 @@ async def review_question_in_paper(
     question_number: int = Form(...),
     current_user: dict = Depends(require_teacher),
 ):
-    """Replace a paper question with another bank question from the same unit and Bloom level."""
+    """Backward-compatible alias for replacing the primary slot of a paper question."""
     paper = await _get_teacher_paper_or_404(paper_id, current_user["id"])
 
     questions = paper.get("questions", [])
@@ -447,57 +595,145 @@ async def review_question_in_paper(
     if not target:
         raise HTTPException(404, "Question not found in paper")
 
-    bloom_level = target.get("bloom_level", "")
-    unit = target.get("unit", "")
-    used_bank_ids = {q.get("bank_id") for q in questions if q.get("bank_id")}
-
-    query: dict = {"syllabus_id": paper.get("syllabus_id", ""), "bloom_level": bloom_level}
-    if unit:
-        query["unit"] = unit
-
-    cursor = question_bank_collection.find(query)
-    candidates = [
-        d async for d in cursor
-        if str(d["_id"]) not in used_bank_ids and d.get("status", QuestionReviewStatus.PENDING.value) in _CURATED_STATUSES
-    ]
-    if not candidates:
-        raise HTTPException(400, "No alternative questions available in question bank")
-
-    replacement = candidates[0]
-    target.update(
-        {
-            "question_text": replacement.get("question", ""),
-            "topic": replacement.get("topic", ""),
-            "marks": int(replacement.get("marks", 0) or 0) or _fallback_marks_for_bloom(
-                replacement.get("bloom_level", bloom_level)
-            ),
-            "bloom_level": replacement.get("bloom_level", bloom_level),
-            "unit": replacement.get("unit", unit),
-            "bank_id": str(replacement["_id"]),
-        }
-    )
+    await _replace_question_slot_from_bank(paper, target, "primary")
 
     await final_question_paper_collection.update_one(
         {"_id": ObjectId(paper_id)},
-        {"$set": {"questions": questions}},
+        {"$set": {"questions": questions, **_touch_paper(paper), "status": FinalPaperStatus.DRAFT.value, "finalized_at": None}},
     )
 
     return {"paper_id": paper_id, "question_number": question_number, "status": "replaced"}
 
 
-@router.get("/final-paper")
+@router.get("/final-paper", response_model=FinalPaperOut)
 async def get_final_paper(
     paper_id: str,
     current_user: dict = Depends(require_teacher),
 ):
     """Alias for fetching a generated paper."""
     doc = await _get_teacher_paper_or_404(paper_id, current_user["id"])
-    return {
-        "id": str(doc["_id"]),
-        "syllabus_id": doc.get("syllabus_id", ""),
-        "exam_title": doc.get("exam_title", ""),
-        "total_marks": doc.get("total_marks", 0),
-        "duration_minutes": doc.get("duration_minutes", 180),
-        "questions": doc.get("questions", []),
-        "created_at": doc.get("created_at", ""),
-    }
+    return _build_final_paper_response(doc)
+
+
+@router.patch("/final-paper/{paper_id}", response_model=FinalPaperOut)
+async def update_final_paper_metadata(
+    paper_id: str,
+    body: FinalPaperMetadataUpdateRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    paper = await _get_teacher_paper_or_404(paper_id, current_user["id"])
+    updates: dict = {}
+
+    if body.exam_title is not None:
+        cleaned = body.exam_title.strip()
+        if not cleaned:
+            raise HTTPException(400, "Exam title cannot be empty")
+        updates["exam_title"] = cleaned
+    if body.total_marks is not None:
+        if body.total_marks <= 0:
+            raise HTTPException(400, "Total marks must be greater than zero")
+        updates["total_marks"] = body.total_marks
+    if body.duration_minutes is not None:
+        if body.duration_minutes <= 0:
+            raise HTTPException(400, "Duration must be greater than zero")
+        updates["duration_minutes"] = body.duration_minutes
+
+    if not updates:
+        return _build_final_paper_response(paper)
+
+    updates.update(_touch_paper(paper))
+    updates["status"] = FinalPaperStatus.DRAFT.value
+    updates["finalized_at"] = None
+    await final_question_paper_collection.update_one({"_id": paper["_id"]}, {"$set": updates})
+    paper.update(updates)
+    return _build_final_paper_response(paper)
+
+
+@router.patch("/final-paper/{paper_id}/questions/{question_number}", response_model=FinalPaperOut)
+async def update_final_paper_question(
+    paper_id: str,
+    question_number: int,
+    body: FinalPaperQuestionUpdateRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    paper = await _get_teacher_paper_or_404(paper_id, current_user["id"])
+    questions = paper.get("questions", [])
+    target = next((q for q in questions if q.get("question_number") == question_number), None)
+    if not target:
+        raise HTTPException(404, "Question not found in paper")
+
+    if body.question_text is not None:
+        target["question_text"] = body.question_text.strip()
+    if body.sub_questions is not None:
+        target["sub_questions"] = [sub.model_dump() for sub in body.sub_questions]
+    if body.alternative_question_text is not None:
+        target["alternative_question_text"] = body.alternative_question_text.strip()
+    if body.alternative_sub_questions is not None:
+        target["alternative_sub_questions"] = [sub.model_dump() for sub in body.alternative_sub_questions]
+    if body.marks is not None:
+        if body.marks <= 0:
+            raise HTTPException(400, "Question marks must be greater than zero")
+        target["marks"] = body.marks
+    if body.bloom_level is not None:
+        target["bloom_level"] = body.bloom_level.strip()
+    if body.topic is not None:
+        target["topic"] = body.topic.strip()
+    if body.unit is not None:
+        target["unit"] = body.unit.strip()
+    if body.or_with_next is not None:
+        target["or_with_next"] = body.or_with_next
+
+    if target.get("sub_questions") and target.get("question_text"):
+        raise HTTPException(400, "Use either question text or sub-questions for the primary slot, not both")
+    if target.get("alternative_sub_questions") and target.get("alternative_question_text"):
+        raise HTTPException(400, "Use either alternative question text or alternative sub-questions, not both")
+
+    await final_question_paper_collection.update_one(
+        {"_id": paper["_id"]},
+        {"$set": {"questions": questions, **_touch_paper(paper), "status": FinalPaperStatus.DRAFT.value, "finalized_at": None}},
+    )
+    paper["questions"] = questions
+    paper["status"] = FinalPaperStatus.DRAFT.value
+    paper["finalized_at"] = None
+    return _build_final_paper_response(paper)
+
+
+@router.post("/final-paper/{paper_id}/questions/{question_number}/replace", response_model=FinalPaperOut)
+async def replace_final_paper_question(
+    paper_id: str,
+    question_number: int,
+    body: FinalPaperQuestionReplaceRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    paper = await _get_teacher_paper_or_404(paper_id, current_user["id"])
+    questions = paper.get("questions", [])
+    target = next((q for q in questions if q.get("question_number") == question_number), None)
+    if not target:
+        raise HTTPException(404, "Question not found in paper")
+
+    await _replace_question_slot_from_bank(paper, target, body.slot)
+    await final_question_paper_collection.update_one(
+        {"_id": paper["_id"]},
+        {"$set": {"questions": questions, **_touch_paper(paper), "status": FinalPaperStatus.DRAFT.value, "finalized_at": None}},
+    )
+    paper["questions"] = questions
+    paper["status"] = FinalPaperStatus.DRAFT.value
+    paper["finalized_at"] = None
+    return _build_final_paper_response(paper)
+
+
+@router.post("/final-paper/{paper_id}/finalize", response_model=FinalPaperOut)
+async def finalize_final_paper(
+    paper_id: str,
+    body: FinalPaperFinalizeRequest,
+    current_user: dict = Depends(require_teacher),
+):
+    paper = await _get_teacher_paper_or_404(paper_id, current_user["id"])
+    status_value = body.status.value
+    updates = _touch_paper(paper)
+    updates["status"] = status_value
+    updates["finalized_at"] = datetime.now(timezone.utc).isoformat() if status_value == FinalPaperStatus.FINALIZED.value else None
+
+    await final_question_paper_collection.update_one({"_id": paper["_id"]}, {"$set": updates})
+    paper.update(updates)
+    return _build_final_paper_response(paper)

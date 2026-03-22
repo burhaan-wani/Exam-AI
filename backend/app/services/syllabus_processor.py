@@ -2,13 +2,14 @@ import asyncio
 import json
 import logging
 from openai import OpenAI, RateLimitError
-from app.config import get_settings
+from app.config import get_settings, get_text_model
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 def _get_openai_client() -> OpenAI:
+    get_text_model(settings)
     return OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=settings.openrouter_api_key,
@@ -53,7 +54,7 @@ Syllabus text:
 
     def _run_completion() -> str:
         resp = client.chat.completions.create(
-            model=settings.openrouter_model,
+            model=get_text_model(settings),
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_message},

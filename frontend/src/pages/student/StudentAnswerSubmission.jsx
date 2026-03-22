@@ -102,6 +102,17 @@ const StudentAnswerSubmission = () => {
     return <div className="text-center text-gray-500 py-8">Paper not found</div>
   }
 
+  const renderSubQuestions = (items) => (
+    <div className="ml-4 space-y-1 text-sm text-gray-700">
+      {items.map((sub, idx) => (
+        <p key={idx}>
+          {sub.label ? <strong>{sub.label}) </strong> : null}
+          {sub.text} ({sub.marks} marks)
+        </p>
+      ))}
+    </div>
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -159,13 +170,15 @@ const StudentAnswerSubmission = () => {
                   <p className="text-gray-900 font-medium mb-2 whitespace-pre-line">{question.question_text}</p>
 
                   {/* Sub-questions */}
-                  {question.sub_questions && question.sub_questions.length > 0 && (
-                    <div className="ml-4 space-y-1 text-sm text-gray-700">
-                      {question.sub_questions.map((sub, idx) => (
-                        <p key={idx}>
-                          <strong>{sub.label}</strong> ({sub.marks} marks): {sub.text}
-                        </p>
-                      ))}
+                  {question.sub_questions && question.sub_questions.length > 0 && renderSubQuestions(question.sub_questions)}
+
+                  {(question.alternative_question_text || (question.alternative_sub_questions && question.alternative_sub_questions.length > 0)) && (
+                    <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 p-3">
+                      <p className="mb-2 text-center text-sm font-semibold text-gray-600">(OR)</p>
+                      {question.alternative_question_text ? (
+                        <p className="text-gray-900 font-medium mb-2 whitespace-pre-line">{question.alternative_question_text}</p>
+                      ) : null}
+                      {question.alternative_sub_questions && question.alternative_sub_questions.length > 0 && renderSubQuestions(question.alternative_sub_questions)}
                     </div>
                   )}
                 </div>
