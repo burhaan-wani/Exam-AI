@@ -33,6 +33,7 @@ const TeacherDashboard = () => {
 
   const latestSyllabus = syllabi[0]
   const totalUnits = syllabi.reduce((sum, syllabus) => sum + (syllabus.topic_count || 0), 0)
+  const latestWorkflowComplete = latestSyllabus?.latest_final_paper_status === 'finalized'
 
   const stats = [
     {
@@ -49,8 +50,12 @@ const TeacherDashboard = () => {
     },
     {
       label: 'Status',
-      value: latestSyllabus ? 'In Progress' : 'Ready',
-      note: latestSyllabus ? 'You can continue the latest workflow' : 'Start by uploading a syllabus',
+      value: latestWorkflowComplete ? 'Completed' : latestSyllabus ? 'In Progress' : 'Ready',
+      note: latestWorkflowComplete
+        ? 'The latest workflow has a finalized paper'
+        : latestSyllabus
+          ? 'You can continue the latest workflow'
+          : 'Start by uploading a syllabus',
       icon: CheckCircle2,
     },
   ]
@@ -65,10 +70,12 @@ const TeacherDashboard = () => {
     {
       title: 'Continue Latest Workflow',
       description: latestSyllabus
-        ? `Resume work on ${latestSyllabus.filename}`
+        ? latestWorkflowComplete
+          ? `Review the completed workflow for ${latestSyllabus.filename}`
+          : `Resume work on ${latestSyllabus.filename}`
         : 'No active workflow yet. Start with a new upload.',
       action: latestSyllabus ? `/question-bank/${latestSyllabus.id}` : '/upload-syllabus',
-      actionLabel: latestSyllabus ? 'Open workflow' : 'Start now',
+      actionLabel: latestSyllabus ? (latestWorkflowComplete ? 'View workflow' : 'Open workflow') : 'Start now',
     },
   ]
 
@@ -115,9 +122,12 @@ const TeacherDashboard = () => {
                   <p className="mt-1 text-sm text-slate-600">
                     {latestSyllabus.topic_count || 0} units extracted on {formatDate(latestSyllabus.created_at)}
                   </p>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Status: {latestWorkflowComplete ? 'Final paper approved' : 'Still in progress'}
+                  </p>
                 </div>
                 <Link to={`/question-bank/${latestSyllabus.id}`}>
-                  <Button className="w-full">Open Workflow</Button>
+                  <Button className="w-full">{latestWorkflowComplete ? 'View Workflow' : 'Open Workflow'}</Button>
                 </Link>
               </div>
             ) : (

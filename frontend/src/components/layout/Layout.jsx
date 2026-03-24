@@ -93,7 +93,7 @@ const Layout = () => {
     <div className="flex h-screen bg-slate-50 text-gray-900">
       <aside
         className={`${
-          sidebarOpen ? 'w-72' : 'w-20'
+          sidebarOpen ? 'w-64' : 'w-20'
         } flex shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300`}
       >
         <div className="border-b border-slate-200 px-5 py-4">
@@ -120,21 +120,21 @@ const Layout = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <nav className="space-y-2">
+        <div className="flex-1 overflow-y-auto p-3">
+          <nav className="space-y-1.5">
             {navLinks.map(({ path, label, icon: Icon, helper }) => {
               const isActive = location.pathname === path || location.pathname.startsWith(`${path}/`)
               return (
                 <Link
                   key={path}
                   to={path}
-                  className={`group flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all ${
+                  className={`group flex items-center gap-3 rounded-xl border px-3 py-3 transition-all ${
                     isActive
                       ? 'border-slate-200 bg-slate-100 text-slate-950'
                       : 'border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950'
                   }`}
                 >
-                  <div className={`rounded-xl p-2 ${isActive ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-700'}`}>
+                  <div className={`rounded-lg p-2 ${isActive ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-700'}`}>
                     <Icon size={18} />
                   </div>
                   {sidebarOpen ? (
@@ -169,11 +169,11 @@ const Layout = () => {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
+        <header className="border-b border-slate-200 bg-white px-5 py-4 lg:px-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-slate-900">{headerMeta.title}</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{headerMeta.description}</p>
+              <h2 className="text-[28px] font-bold tracking-tight text-slate-900">{headerMeta.title}</h2>
+              <p className="mt-1.5 max-w-3xl text-sm leading-6 text-slate-600">{headerMeta.description}</p>
             </div>
 
             {user.role === 'teacher' ? (
@@ -189,7 +189,7 @@ const Layout = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto px-5 py-5 lg:px-8 lg:py-6">
+        <main className="flex-1 overflow-auto px-4 py-4 lg:px-8 lg:py-6">
           <Outlet />
         </main>
       </div>

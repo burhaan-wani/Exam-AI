@@ -288,12 +288,18 @@ const QuestionBankPage = () => {
     if (topicFilter.trim() && !question.topic.toLowerCase().includes(topicFilter.trim().toLowerCase())) return false
     return true
   })
+  const finalPaperApproved = syllabus?.latest_final_paper_status === 'finalized'
 
   const workflowStages = [
     { title: 'Reference grounding', description: 'Optional retrieval support.', status: refDocs.length ? 'complete' : 'current', detail: refDocs.length ? `${refDocs.length} files uploaded` : 'No grounding files added yet' },
     { title: 'Question bank', description: 'Generate and curate the draft bank.', status: bank.length ? 'complete' : 'current', detail: bank.length ? `${bank.length} questions generated` : 'Bank not generated yet' },
     { title: 'Template blueprint', description: 'Upload and validate the template.', status: templateDoc?.validation?.is_valid ? 'complete' : templateDoc ? 'current' : 'pending', detail: templateDoc ? (templateDoc.validation?.is_valid ? 'Blueprint validated' : 'Blueprint needs review') : 'No template uploaded yet' },
-    { title: 'Final paper assembly', description: 'Generate from curated questions only.', status: curatedCount && templateDoc?.validation?.is_valid ? 'current' : 'pending', detail: curatedCount ? `${curatedCount} curated questions ready` : 'Curate approved questions first' },
+    {
+      title: 'Final paper assembly',
+      description: 'Generate from curated questions only.',
+      status: finalPaperApproved ? 'complete' : curatedCount && templateDoc?.validation?.is_valid ? 'current' : 'pending',
+      detail: finalPaperApproved ? 'Final paper approved' : curatedCount ? `${curatedCount} curated questions ready` : 'Curate approved questions first',
+    },
   ]
 
   const renderSubparts = (groupIndex, optionKey, subparts = [], label) => (
@@ -325,7 +331,7 @@ const QuestionBankPage = () => {
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium text-slate-100"><Sparkles size={14} />Teacher curation and paper-assembly workspace</div>
             <div>
-              <h1 className="text-4xl font-bold tracking-tight">Review the bank carefully, then assemble the final paper with confidence.</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Review the bank carefully, then assemble the final paper with confidence.</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">This page now follows the working teacher flow: reference grounding, question-bank curation, template review, blueprint validation, and final-paper generation.</p>
             </div>
           </div>

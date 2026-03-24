@@ -25,7 +25,7 @@ CardHeader.displayName = 'CardHeader'
 const CardTitle = forwardRef(({ className, ...props }, ref) => (
   <h2
     ref={ref}
-    className={cn('text-2xl font-bold leading-none tracking-tight', className)}
+    className={cn('text-xl font-semibold leading-tight tracking-tight', className)}
     {...props}
   />
 ))

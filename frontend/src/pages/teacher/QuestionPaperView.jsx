@@ -235,7 +235,7 @@ const QuestionPaperView = () => {
   const isFinalized = paper.status === 'finalized'
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex flex-wrap gap-3 no-print" data-html2canvas-ignore="true">
         <Button onClick={handleDownloadPDF} variant="outline">
           <Download size={18} className="mr-2" />
@@ -260,7 +260,7 @@ const QuestionPaperView = () => {
         className={isFinalized ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}
         data-html2canvas-ignore="true"
       >
-        <CardContent className="space-y-3 pt-6 text-sm">
+        <CardContent className="space-y-3 p-5 text-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className="font-semibold text-gray-900">Final-Paper HITL</span>
             <Badge variant={isFinalized ? 'default' : 'secondary'}>{paper.status}</Badge>
@@ -271,7 +271,7 @@ const QuestionPaperView = () => {
               ? 'This paper is approved. You can copy the student link to share it, or move it back to draft if you need more edits.'
               : 'This paper is still in teacher review. Edit wording, subparts, marks, OR behavior, or replace questions before approving the final paper.'}
           </p>
-          <div className="rounded border border-white/70 bg-white/70 p-3 text-xs text-gray-700">
+          <div className="rounded-xl border border-white/70 bg-white/70 p-3 text-xs text-gray-700">
             <p>
               <span className="font-semibold text-gray-900">Approve Final Paper:</span> locks this draft in as the official paper version.
             </p>
@@ -283,7 +283,7 @@ const QuestionPaperView = () => {
       </Card>
 
       <Card className="no-print" data-html2canvas-ignore="true">
-        <CardContent className="space-y-3 pt-6">
+        <CardContent className="space-y-3 p-5">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <Input
               value={paperMeta.exam_title}
@@ -312,7 +312,7 @@ const QuestionPaperView = () => {
 
       <div
         id="question-paper"
-        className="mx-auto max-w-4xl bg-white p-12 shadow-lg print:max-w-full print:p-0 print:shadow-none"
+        className="mx-auto max-w-4xl rounded-2xl bg-white p-8 shadow-sm print:max-w-full print:rounded-none print:p-0 print:shadow-none lg:p-10"
       >
         <div className="mb-8 border-b pb-6 text-center">
           <h1 className="mb-2 text-3xl font-bold text-gray-900">{paper.exam_title}</h1>
@@ -358,7 +358,7 @@ const QuestionPaperView = () => {
 
                 {isEditing ? (
                   <div
-                    className="space-y-4 rounded border border-gray-200 bg-gray-50 p-4 print:hidden"
+                    className="space-y-4 rounded-xl border border-gray-200 bg-gray-50 p-4 print:hidden"
                     data-html2canvas-ignore="true"
                   >
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
@@ -368,7 +368,7 @@ const QuestionPaperView = () => {
                       <Input type="number" value={questionDraft.marks} onChange={(e) => updateDraft('marks', Number(e.target.value) || 0)} placeholder="Marks" />
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       <p className="font-medium text-gray-900">Primary slot</p>
                       <Textarea
                         rows={3}
@@ -376,7 +376,7 @@ const QuestionPaperView = () => {
                         onChange={(e) => updateDraft('question_text', e.target.value)}
                         placeholder="Primary question text"
                       />
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {questionDraft.sub_questions.map((sub, index) => (
                           <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-5">
                             <Input value={sub.label} onChange={(e) => updateSubQuestion('label', e.target.value, index, 'sub_questions')} placeholder="Label" />
@@ -404,7 +404,7 @@ const QuestionPaperView = () => {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                       <div className="flex items-center justify-between gap-3">
                         <p className="font-medium text-gray-900">Internal OR slot</p>
                         <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -422,7 +422,7 @@ const QuestionPaperView = () => {
                         onChange={(e) => updateDraft('alternative_question_text', e.target.value)}
                         placeholder="Alternative question text (optional)"
                       />
-                      <div className="space-y-2">
+                      <div className="space-y-2.5">
                         {questionDraft.alternative_sub_questions.map((sub, index) => (
                           <div key={index} className="grid grid-cols-1 gap-2 md:grid-cols-5">
                             <Input value={sub.label} onChange={(e) => updateSubQuestion('label', e.target.value, index, 'alternative_sub_questions')} placeholder="Label" />
@@ -466,7 +466,7 @@ const QuestionPaperView = () => {
                     {question.sub_questions?.length > 0 ? renderSubQuestions(question.sub_questions) : null}
 
                     {hasAlternative ? (
-                      <div className="space-y-3 rounded border border-gray-200 bg-gray-50 p-4">
+                      <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-4">
                         <p className="text-center text-sm font-semibold text-gray-700">(OR)</p>
                         {question.alternative_question_text ? <p className="whitespace-pre-line text-gray-800">{question.alternative_question_text}</p> : null}
                         {question.alternative_sub_questions?.length > 0 ? renderSubQuestions(question.alternative_sub_questions) : null}

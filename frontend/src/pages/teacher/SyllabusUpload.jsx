@@ -103,7 +103,7 @@ const SyllabusUpload = () => {
               Teacher Workflow
             </div>
             <div>
-              <h1 className="text-4xl font-bold tracking-tight text-gray-900">Start with the syllabus, then let the workflow branch naturally.</h1>
+              <h1 className="text-3xl font-bold tracking-tight text-gray-900">Start with the syllabus, then let the workflow branch naturally.</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-600">
                 This stage creates the structured foundation for the rest of the teacher experience. Once the syllabus is parsed,
                 you can ground generation with references, review extracted units, and continue into question-bank curation.
