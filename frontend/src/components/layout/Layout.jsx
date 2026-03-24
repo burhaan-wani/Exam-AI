@@ -1,11 +1,19 @@
-import { useState } from 'react'
-import { Outlet, Link, useNavigate } from 'react-router-dom'
-import { Menu, X, LogOut, LayoutDashboard, Upload, BookOpen } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
+import {
+  BookOpen,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Upload,
+  X,
+} from 'lucide-react'
 import Button from '../ui/Button'
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const navigate = useNavigate()
+  const location = useLocation()
   const user = JSON.parse(localStorage.getItem('user') || '{}')
 
   const handleLogout = () => {
@@ -15,79 +23,173 @@ const Layout = () => {
   }
 
   const teacherLinks = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/upload-syllabus', label: 'Upload Syllabus', icon: Upload },
+    {
+      path: '/dashboard',
+      label: 'Dashboard',
+      icon: LayoutDashboard,
+      helper: 'Overview and active workflows',
+    },
+    {
+      path: '/upload-syllabus',
+      label: 'Start New Workflow',
+      icon: Upload,
+      helper: 'Upload syllabus and references',
+    },
   ]
 
   const studentLinks = [
-    { path: '/submit-answers', label: 'Submit Answers', icon: Upload },
-    { path: '/evaluation-results', label: 'Results', icon: BookOpen },
+    {
+      path: '/submit-answers',
+      label: 'Submit Answers',
+      icon: Upload,
+      helper: 'Open the assigned paper',
+    },
+    {
+      path: '/evaluation-results',
+      label: 'Results',
+      icon: BookOpen,
+      helper: 'View evaluated submissions',
+    },
   ]
 
   const navLinks = user.role === 'teacher' ? teacherLinks : studentLinks
 
+  const headerMeta = useMemo(() => {
+    if (user.role !== 'teacher') {
+      return {
+        title: 'Student Portal',
+        description: 'View the assigned paper, submit answers, and track evaluation results.',
+      }
+    }
+
+    if (location.pathname.startsWith('/upload-syllabus')) {
+      return {
+        title: 'Syllabus Intake',
+        description: 'Start the teacher workflow by uploading the syllabus, validating structure, and adding grounding material.',
+      }
+    }
+
+    if (location.pathname.startsWith('/question-bank/')) {
+      return {
+        title: 'Question Bank Workflow',
+        description: 'Curate the bank, review the blueprint, and move toward a finalized question paper.',
+      }
+    }
+
+    if (location.pathname.startsWith('/question-paper/')) {
+      return {
+        title: 'Final Paper Review',
+        description: 'Refine the generated paper, approve it, and prepare it for student release.',
+      }
+    }
+
+    return {
+      title: 'Teacher Workspace',
+      description: 'Manage the full flow from syllabus upload to final paper approval in one place.',
+    }
+  }, [location.pathname, user.role])
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-slate-50 text-gray-900">
       <aside
         className={`${
-          sidebarOpen ? 'w-64' : 'w-20'
-        } bg-slate-900 text-white transition-all duration-300 border-r border-slate-800`}
+          sidebarOpen ? 'w-72' : 'w-20'
+        } flex shrink-0 flex-col border-r border-slate-200 bg-white transition-all duration-300`}
       >
-        <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-          {sidebarOpen && <h1 className="text-xl font-bold">Exam AI</h1>}
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
+        <div className="border-b border-slate-200 px-5 py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                <LayoutDashboard size={20} />
+              </div>
+              {sidebarOpen ? (
+                <div>
+                  <p className="text-lg font-semibold text-slate-900">Exam AI</p>
+                  <p className="text-xs text-slate-500">
+                    {user.role === 'teacher' ? 'Teacher paper workflow' : 'Student portal'}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="rounded-xl p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900"
+            >
+              {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
-          {navLinks.map(({ path, label, icon: Icon }) => (
-            <Link
-              key={path}
-              to={path}
-              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition-colors"
-            >
-              <Icon size={20} />
-              {sidebarOpen && <span className="text-sm font-medium">{label}</span>}
-            </Link>
-          ))}
-        </nav>
+        <div className="flex-1 overflow-y-auto p-4">
+          <nav className="space-y-2">
+            {navLinks.map(({ path, label, icon: Icon, helper }) => {
+              const isActive = location.pathname === path || location.pathname.startsWith(`${path}/`)
+              return (
+                <Link
+                  key={path}
+                  to={path}
+                  className={`group flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all ${
+                    isActive
+                      ? 'border-slate-200 bg-slate-100 text-slate-950'
+                      : 'border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50 hover:text-slate-950'
+                  }`}
+                >
+                  <div className={`rounded-xl p-2 ${isActive ? 'bg-white text-slate-900' : 'bg-slate-100 text-slate-700'}`}>
+                    <Icon size={18} />
+                  </div>
+                  {sidebarOpen ? (
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">{label}</p>
+                      <p className={`truncate text-xs ${isActive ? 'text-slate-500' : 'text-slate-500'}`}>{helper}</p>
+                    </div>
+                  ) : null}
+                </Link>
+              )
+            })}
+          </nav>
+        </div>
 
-        <div className="p-4 border-t border-slate-800 space-y-3">
-          {sidebarOpen && user.role === 'teacher' && (
-            <div className="rounded-lg bg-slate-800 p-3 text-xs text-slate-300">
-              <p className="font-semibold text-white">New teacher workflow</p>
-              <p className="mt-1">Upload syllabus, generate the question bank, then build and refine the paper.</p>
+        <div className="border-t border-slate-200 p-4">
+          {sidebarOpen ? (
+            <div className="mb-4 rounded-2xl bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Signed in as</p>
+              <p className="mt-2 truncate text-sm font-semibold text-slate-900">{user.name}</p>
+              <p className="mt-1 text-xs capitalize text-slate-500">{user.role || 'user'}</p>
             </div>
-          )}
-          {sidebarOpen && (
-            <div className="text-xs">
-              <p className="text-gray-400">Logged in as</p>
-              <p className="font-semibold truncate">{user.name}</p>
-            </div>
-          )}
+          ) : null}
           <Button
             onClick={handleLogout}
             variant="ghost"
-            className="w-full justify-start gap-3 text-red-400 hover:text-red-300 hover:bg-slate-800"
+            className="w-full justify-start gap-3 rounded-2xl text-slate-700 hover:bg-slate-100 hover:text-slate-900"
           >
-            <LogOut size={20} />
-            {sidebarOpen && 'Logout'}
+            <LogOut size={18} />
+            {sidebarOpen ? 'Logout' : null}
           </Button>
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-gray-200 px-8 py-4 shadow-sm">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {user.role === 'teacher' ? 'Teacher Workspace' : 'Student Portal'}
-          </h2>
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="border-b border-slate-200 bg-white px-6 py-5 lg:px-8">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight text-slate-900">{headerMeta.title}</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{headerMeta.description}</p>
+            </div>
+
+            {user.role === 'teacher' ? (
+              <div className="flex flex-wrap gap-3">
+                <Link to="/upload-syllabus">
+                  <Button>
+                    <Upload size={16} className="mr-2" />
+                    New Workflow
+                  </Button>
+                </Link>
+              </div>
+            ) : null}
+          </div>
         </header>
 
-        <main className="flex-1 overflow-auto p-8">
+        <main className="flex-1 overflow-auto px-5 py-5 lg:px-8 lg:py-6">
           <Outlet />
         </main>
       </div>
